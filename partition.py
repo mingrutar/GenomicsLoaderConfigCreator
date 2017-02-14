@@ -9,6 +9,7 @@ histogram_fn = '1000_histogram'
 TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 
 def make_col_partition(bin_num):
+    bin_num = int(bin_num)
     with open(histogram_fn, 'r') as rfd:
         context = rfd.readlines()
     lines = [ l.split(',') for l in context ]
@@ -33,5 +34,7 @@ def make_col_partition(bin_num):
     return partitions
 
 if __name__ == "__main__" :
-    parts = make_col_partition(int(sys.argv[1]))
+    func_name = 'make_col_partition'
+    print(locals())
+    parts = locals()[func_name](sys.argv[1])
     pprint(parts)

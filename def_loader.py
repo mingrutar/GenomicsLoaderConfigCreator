@@ -58,7 +58,7 @@ def load_from_db() :
             jstr = json.loads(key4sub)
             input_file = __proc_template(temp_name, jstr) 
         else :
-            input_file = temp_name
+            input_file = __proc_template(temp_name)
 #            input_file = self.__proc_template(temp_name, jstr) if key4sub else temp_name
         my_templates[r[0]] = input_file
     pprint(my_templates)
@@ -150,7 +150,7 @@ def __getValue(itemType, itemVal) :
     if itemType in transformer:
         return transformer[itemType](itemVal)
     elif itemType[-2:] == '()':
-        return locals()[itemType[:-2]](itemVal)
+        return globals()[itemType[:-2]](itemVal)
     else:
         return None
 
@@ -162,10 +162,8 @@ def __genLoadConfig( lc_items, use_mpirun ) :
     load_conf = {}
     mpirun_num = 1
     for key, val in loader_tags.items() :
-        print("key=%s, val[1]=%s, val[2]=%s" % (key, val[1], val[2]))
+#        print("key=%s, val[1]=%s, val[2]=%s" % (key, val[1], val[2]))
         load_conf[key] = __getValue(val[1], val[2])
-    pprint(loader_tags)
-    print("** load_conf")
     pprint(load_conf)
     for key, val in overridable_tags.items() :
         if key in lc_items :
@@ -183,16 +181,17 @@ def __prepare_run (run_id, target_cmd, use_mpirun) :
     for host, lc_id in run_config[run_id] :
         if lc_id in user_loader_conf_def:
             load_config, mpirun_num = __genLoadConfig(user_loader_conf_def[lc_id], use_mpirun) 
-            pprint(load_config)
             jsonfn = os.path.join(run_dir, host+".json")
+            print("+++ load_config, mpirun_num = %d, jsonfn=%s" % (mpirun_num, jsonfn) )
+            pprint(load_config)
             with open(jsonfn, 'w') as ofd :
                 json.dump(load_config, ofd)
             
             theCommand = "%s -n %d %s %s" % (MPIRUN, mpirun_num, target_cmd, jsonfn)  \
                 if mpirun_num > 1 else "%s %s" % (target_cmd, jsonfn)
             ret.append((theCommand, host, jsonfn) )   
-            with open(jsonfn, 'w') as ofd :
-                json.dump(ret, ofd)
+#            with open(jsonfn, 'w') as ofd :
+#                json.dump(ret, ofd)
             print("INFO prepare_run made=%s" % ret)
     return ret
 

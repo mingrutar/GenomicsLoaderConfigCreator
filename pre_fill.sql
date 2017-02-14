@@ -76,7 +76,7 @@ INSERT INTO loader_config_tag (name, type, default_value, user_definable)
 VALUES ("size_per_column_partition", 'MB', "100", 1);
 INSERT INTO loader_config_tag (name, type, default_value, user_definable) 
 -- number parallel read to 1, so far 2 didn't improve' 
-VALUES ("num_parallel_vcf_files", 'MB', "1", 1);
+VALUES ("num_parallel_vcf_files", 'Number', "1", 1);
 -- default compress. 
 INSERT INTO loader_config_tag (name, type, default_value, user_definable) 
 VALUES ("compress_tiledb_array", 'Boolean', "true", 1);
