@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS template (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
    name Text NOT NULL,
    file_path Path NOT NULL,
-   params TEXT NULL
+   params TEXT NULL,
+   extra TEXT NULL
  );
 --
 -- define loader_config <=> a .json file under loaders/

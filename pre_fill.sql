@@ -17,10 +17,11 @@ INSERT INTO host (hostname) VALUES ("compute-2-29");
 
 --- template 
 INSERT INTO template (name, file_path) VALUES ("vid", '$WS_HOME/templates/vid.json' );
-INSERT INTO template (name, file_path, params) 
-VALUES ("callsets", '$WS_HOME/templates/callsets.temp', '{"@data_dir@" : "/scratch/1000genome" }');
+INSERT INTO template (name, file_path, params, extra) 
+VALUES ("callsets", '$WS_HOME/templates/callsets.temp', '{"@data_dir@" : "/scratch/1000genome" }',
+    '{"histogram": "$WS_HOME/templates/1000_histogram"}' );
 INSERT INTO template (name, file_path) 
-VALUES ("vcf_header", '$WS_HOME/template_vcf_header.vcf' );
+VALUES ("vcf_header", '$WS_HOME/templates/template_vcf_header.vcf' );
 INSERT INTO template (name, file_path) 
 VALUES ("ref_genome", '/data/broad/samples/joint_variant_calling/broad_reference/Homo_sapiens_assembly19.fasta' );
 

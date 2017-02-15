@@ -9,12 +9,11 @@ from datetime import datetime
 from pprint import pprint
 
 one_MB = 1048576
-histogram_fn = '1000_histogram'
 TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 
 db_queries = {"LoaderConfigTag" : 'SELECT name, type, default_value FROM loader_config_tag where user_definable={ud}',
     "Host" : 'SELECT hostname FROM host WHERE avalability = 1', 
-    "Template" : 'SELECT name, file_path, params FROM template' }
+    "Template" : 'SELECT name, file_path, params, extra FROM template' }
 
 my_hostlist = []
 my_templates = {}
@@ -24,22 +23,33 @@ overridable_tags = {}
 user_loader_conf_def = {}       # { uuid : { tag : val} }
 run_config = {}                 # { uuid : [ (host, lcdef) ] }
 
+histogram_fn = None
 working_dir = os.environ.get('WS_HOME', os.getcwd())
 
-def __proc_template( templateFile, sub_key_val) :
-        tf_path = templateFile.replace("$WS_HOME", working_dir)
-        if os.path.isfile(tf_path) :
-            with open(tf_path, 'r') as fd :
-                context = fd.readlines()
-            jf_path = re.sub(".temp", ".json", tf_path) 
-            for key, val in sub_key_val.items() :
-                context = re(key, val, context)
-            with open(json, 'w') as ofd:
-                ofd.write(context)
-            return jf_path
-        else :
-            print("WARN: template file %s not found" % tf_path)
-            return None
+def __proc_template( templateFile, sub_key_val = None, extra_args = None) :
+    def histogram (val):
+        global histogram_fn
+        histogram_fn = val.replace("$WS_HOME", working_dir)
+ 
+    f_path = templateFile.replace("$WS_HOME", working_dir)
+    if os.path.isfile(f_path) :
+        if f_path[-5:] == '.temp' :
+            with open(f_path, 'r') as fd :
+                context = fd.read()
+            jf_path = "%s.json" % f_path[:-5] 
+            if sub_key_val:
+                for key, val in sub_key_val.items() :
+                    context.replace(key, val)
+                with open(jf_path, 'w') as ofd:
+                    ofd.write(context)
+            f_path = jf_path
+        if extra_args:
+            for key, val in extra_args.items():
+                locals()[key](val) 
+        return f_path
+    else :
+        print("WARN: template file %s not found" % f_path)
+        return None
 
 def load_from_db() :
     db_conn = sqlite3.connect('genomicsdb_loader.db')
@@ -48,21 +58,15 @@ def load_from_db() :
     rows = list(mycursor.fetchall())
     for r in rows:
         my_hostlist.append(r[0])
- 
+    
  #  "Template" : 'SELECT name, file_path, params FROM template' }
     for r in mycursor.execute(db_queries['Template']):
         temp_name = str(r[1]).replace("'", "\"")
-        if (r[2]) :
-            key4sub = str(r[2]).replace("'", "\"")
-            print("temp_name=%s, key4sub=%s" % (temp_name, key4sub))
-            jstr = json.loads(key4sub)
-            input_file = __proc_template(temp_name, jstr) 
-        else :
-            input_file = __proc_template(temp_name)
-#            input_file = self.__proc_template(temp_name, jstr) if key4sub else temp_name
-        my_templates[r[0]] = input_file
-    pprint(my_templates)
-
+        jstrParams = json.loads(str(r[2]).replace("'", "\"")) if r[2] else None
+        jstrMore =   json.loads(str(r[3]).replace("'", "\"")) if r[3] else None
+        input_file = __proc_template(temp_name, jstrParams, jstrMore) 
+        my_templates[r[0]] = input_file if input_file else temp_name
+        
     for row in mycursor.execute(db_queries['LoaderConfigTag'].format(ud=0)):
         loader_tags[row[0]] = list(row)
     for row in mycursor.execute(db_queries['LoaderConfigTag'].format(ud=1)):
@@ -182,34 +186,39 @@ def __prepare_run (run_id, target_cmd, use_mpirun) :
         if lc_id in user_loader_conf_def:
             load_config, mpirun_num = __genLoadConfig(user_loader_conf_def[lc_id], use_mpirun) 
             jsonfn = os.path.join(run_dir, host+".json")
-            print("+++ load_config, mpirun_num = %d, jsonfn=%s" % (mpirun_num, jsonfn) )
-            pprint(load_config)
+#            print("+++ load_config, mpirun_num = %d, jsonfn=%s" % (mpirun_num, jsonfn) )
+#            pprint(load_config)
             with open(jsonfn, 'w') as ofd :
                 json.dump(load_config, ofd)
             
             theCommand = "%s -n %d %s %s" % (MPIRUN, mpirun_num, target_cmd, jsonfn)  \
                 if mpirun_num > 1 else "%s %s" % (target_cmd, jsonfn)
             ret.append((theCommand, host, jsonfn) )   
-#            with open(jsonfn, 'w') as ofd :
-#                json.dump(ret, ofd)
             print("INFO prepare_run made=%s" % ret)
-    return ret
+    return (run_id, ret)
 
 def launch_run( run_id, use_mpirun=True, dryrun=False) :
     ''' assign host to loader_config. 
     TODO 1) not support run on multi hosts, 2) allow user assign host '''
     command = "vcf2tiledb"
-    launch_info = __prepare_run(run_id, command, use_mpirun)
-    if dryrun :
-        print("DONE dryrun generated: %s" % (launch_info))
-        return 0
-    else :
-        print("START run loaders: %s" % (launch_info))
-
+    run_id, launch_info = __prepare_run(run_id, command, use_mpirun)
+    print("START run %s loaders: %s" % (run_id, launch_info))
+    for runinfo in launch_info :
+        exec_json = dict({ 'run_id' : run_id })
+        exec_json['cmd'] = list( [ runinfo[1], runinfo[2] ] )
+        jsonfl = runinfo[1]
+        with open(jsonfl, 'w') as ofd :
+            json.dump(exec_json, ofd)
+        if dryrun :
+            print('DRYRUN: os.system("ssh %s python run_exec.py %s &" % (runinfo[1], jsonfl ))')
+        else :
+            os.system("ssh %s python run_exec.py %s &" % (runinfo[1], jsonfl ))
+        print("launched at %s" % (runinfo[0]))
+ 
 if __name__ == '__main__' :
     load_from_db()
-    print("=== loaded tags ")
-    pprint(overridable_tags)
+#    print("=== loaded tags ")
+#    pprint(overridable_tags)
 
     loader_config = sys.argv[1] if(len(sys.argv) > 1) else "loader_def.json"
     ifl = os.path.join(os.getcwd(), loader_config)
@@ -221,4 +230,3 @@ if __name__ == '__main__' :
     if (cfg_item_ids) :
         run_id = assign_host_run(cfg_item_ids)
         launch_run(run_id, dryrun=True)
-
