@@ -6,20 +6,32 @@ import os.path
 import json
 import uuid
 from datetime import datetime
-from pprint import pprint
+import time
+import shutil
 
 one_MB = 1048576
 TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
+TARGET_TEST_COMMAND = "vcf2tiledb"
+MPIRUN = "/opt/openmpi/bin/mpirun"
 
-db_queries = {"LoaderConfigTag" : 'SELECT name, type, default_value FROM loader_config_tag where user_definable={ud}',
-    "Host" : 'SELECT hostname FROM host WHERE avalability = 1', 
-    "Template" : 'SELECT name, file_path, params, extra FROM template' }
-
+db_queries = {"Host" : 'SELECT hostname FROM host WHERE avalability = 1',
+    "LC_Tag" : 'SELECT name, type, default_value FROM loader_config_tag where user_definable=0',
+    "LC_OverrideTag" : 'SELECT name, type, default_value,tag_code FROM loader_config_tag where user_definable=1',
+    "Template" : 'SELECT name, file_path, params, extra FROM template',
+    'Select_user_lc' : 'SELECT name, config, _id from loader_config_def',
+    'Select_defined_run' : 'SELECT _id, loader_configs from run_def',
+    'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config, creation_ts) VALUES (\"%s\", \"%s\", %d)",
+    'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, creation_ts) VALUES (\"%s\", %d)'
+}
+# look up 
 my_hostlist = []
 my_templates = {}
 loader_tags = {}
 overridable_tags = {}
+defined_loaders = {}        # ld_name, (config, dbid) 
+defined_runs = {}           # dbid, 
 
+# runtime
 user_loader_conf_def = {}       # { uuid : { tag : val} }
 run_config = {}                 # { uuid : [ (host, lcdef) ] }
 
@@ -39,7 +51,7 @@ def __proc_template( templateFile, sub_key_val = None, extra_args = None) :
             jf_path = "%s.json" % f_path[:-5] 
             if sub_key_val:
                 for key, val in sub_key_val.items() :
-                    context.replace(key, val)
+                    context = context.replace(key, val)
                 with open(jf_path, 'w') as ofd:
                     ofd.write(context)
             f_path = jf_path
@@ -67,23 +79,55 @@ def load_from_db() :
         input_file = __proc_template(temp_name, jstrParams, jstrMore) 
         my_templates[r[0]] = input_file if input_file else temp_name
         
-    for row in mycursor.execute(db_queries['LoaderConfigTag'].format(ud=0)):
+    for row in mycursor.execute(db_queries['LC_Tag']):
         loader_tags[row[0]] = list(row)
-    for row in mycursor.execute(db_queries['LoaderConfigTag'].format(ud=1)):
+    for row in mycursor.execute(db_queries['LC_OverrideTag']):
         overridable_tags[row[0]] = list(row)
+
+    for row in mycursor.execute(db_queries['Select_user_lc']) :
+        cfg = json.loads(row[1].replace("'", "\"") )
+        defined_loaders[row[0]] = (cfg, row[2])  
+    for row in mycursor.execute(db_queries['Select_defined_run']) :
+        defined_runs[row[0]] = row[1]
     db_conn.close()
 
-# input [ {, , }, { }], return [ ids]
+# unique name for user def 
+def loader_name(config) : 
+    ''' list of tuple, make a short name '''
+    name = []
+    as_defaults = []
+    for key in sorted(config.keys()):
+        val = config[key]
+        if key in overridable_tags and str(val) != overridable_tags[key][2]:
+            if overridable_tags[key][1] == 'Boolean' :
+                name.append("%s%s" % (overridable_tags[key][3], val[:1]))
+            else :
+                name.append("%s%s" % (overridable_tags[key][3], val) )
+        else :
+            as_defaults.append(key)
+    for x in as_defaults:
+        del config[x]
+    return ''.join(name)
+
 def addUserConfigs(user_defined) :
     if isinstance(user_defined, list) :
         ret_val = []
-        for config in user_defined:
-            id = uuid.uuid4()
-            user_loader_conf_def[id] = config
-            # TODO: to db?
-            ret_val.append(id)
-        pprint(user_loader_conf_def)
-        pprint(ret_val)    
+        db_conn = None
+        for config in user_defined: #  config is dict,
+            lcname = loader_name(config)
+            if lcname not in defined_loaders:
+                if not db_conn:
+                    db_conn = sqlite3.connect('genomicsdb_loader.db')
+                mycursor = db_conn.cursor()
+                stmt = db_queries['INSERT_LOADER'] % (lcname, str(config), int(time.time()) )
+                mycursor.execute(stmt)
+                loader_id = mycursor.lastrowid
+                defined_loaders[lcname] = (config, loader_id) 
+            user_loader_conf_def[lcname] = defined_loaders[lcname][0]
+            ret_val.append(lcname)
+        if db_conn:
+            db_conn.commit()
+            db_conn.close()
         return ret_val
     else :
         print("WARN add requies a list object") 
@@ -92,23 +136,24 @@ def addUserConfigs(user_defined) :
 def assign_host_run(lcdef_list) :
     host_num = len(my_hostlist)
     run_list = []
-    print("#host =%d, #lc=%d" % (host_num, len(lcdef_list) ))
     for i in range(len(lcdef_list)) :
-        run_list.append( (my_hostlist[i], lcdef_list[i])  )
-    run_id = uuid.uuid4()
-    #TODO persist to db?
+        run_list.append( (my_hostlist[i % host_num], lcdef_list[i])  )
+    db_conn = sqlite3.connect('genomicsdb_loader.db')
+    mycursor = db_conn.cursor()
+    stmt = db_queries['INSERT_RUN_DEF'] % ("-".join(lcdef_list), int(time.time()) )
+    mycursor.execute(stmt)
+    run_id = mycursor.lastrowid
+    db_conn.commit
+    db_conn.close()
     run_config[run_id] = run_list
-    pprint(run_config)
     return run_id
 
 def __make_path(target_path) :
     if os.path.exists(target_path) :
-        for root, dirs, files in os.walk(target_path):
-            for fn in files:
-                print("WARN removing old loader file %s" % fn)
-                os.remove(os.path.join(target_path, fn))
+        shutil.rmtree(target_path)
     else:
         os.makedirs(target_path)
+
 def __str2num(x) :
     try:
         return int(x)
@@ -118,7 +163,6 @@ def __str2num(x) :
         except ValueError:
             return None
 
-#
 def make_col_partition(bin_num):
     bin_num = int(bin_num)
     with open(histogram_fn, 'r') as rfd:
@@ -143,6 +187,7 @@ def make_col_partition(bin_num):
         partitions.append({"array" :"TEST%d" % parnum,
             "begin" : begin, "workspace" : TILE_WORKSPACE })
     return partitions
+
 transformer = {'String' : lambda x : x if isinstance(x, str) else None,
         'Number' : __str2num ,
         'Boolean' : lambda x: x.lower() == 'true' ,
@@ -162,13 +207,10 @@ def __getValue(itemType, itemVal) :
 # user only define the value
 def __genLoadConfig( lc_items, use_mpirun ) :
     ''' return json load file '''
-    print("__genLoadConfig: use_mpirun=%s" % use_mpirun)
     load_conf = {}
     mpirun_num = 1
     for key, val in loader_tags.items() :
-#        print("key=%s, val[1]=%s, val[2]=%s" % (key, val[1], val[2]))
         load_conf[key] = __getValue(val[1], val[2])
-    pprint(load_conf)
     for key, val in overridable_tags.items() :
         if key in lc_items :
             val[2] = lc_items[key]
@@ -186,47 +228,45 @@ def __prepare_run (run_id, target_cmd, use_mpirun) :
         if lc_id in user_loader_conf_def:
             load_config, mpirun_num = __genLoadConfig(user_loader_conf_def[lc_id], use_mpirun) 
             jsonfn = os.path.join(run_dir, host+".json")
-#            print("+++ load_config, mpirun_num = %d, jsonfn=%s" % (mpirun_num, jsonfn) )
-#            pprint(load_config)
             with open(jsonfn, 'w') as ofd :
                 json.dump(load_config, ofd)
-            
-            theCommand = "%s -n %d %s %s" % (MPIRUN, mpirun_num, target_cmd, jsonfn)  \
+            theCommand = "%s -np %d %s %s" % (MPIRUN, mpirun_num, target_cmd, jsonfn)  \
                 if mpirun_num > 1 else "%s %s" % (target_cmd, jsonfn)
             ret.append((theCommand, host, jsonfn) )   
-            print("INFO prepare_run made=%s" % ret)
     return (run_id, ret)
 
 def launch_run( run_id, use_mpirun=True, dryrun=False) :
     ''' assign host to loader_config. 
-    TODO 1) not support run on multi hosts, 2) allow user assign host '''
-    command = "vcf2tiledb"
-    run_id, launch_info = __prepare_run(run_id, command, use_mpirun)
-    print("START run %s loaders: %s" % (run_id, launch_info))
+    1) not support run on multi hosts, 2) allow user assign host '''
+    run_id, launch_info = __prepare_run(run_id, TARGET_TEST_COMMAND, use_mpirun)
+    #TODO: check software readiness @ all hosts
+    print("START run %s loaders @ %s" % (run_id, datetime.now()))
+    ws_path = os.path.join(working_dir, 'run_ws')
+    __make_path(ws_path)
     for runinfo in launch_info :
         exec_json = dict({ 'run_id' : run_id })
-        exec_json['cmd'] = list( [ runinfo[1], runinfo[2] ] )
-        jsonfl = runinfo[1]
+        exec_json['cmd'] = list( [ runinfo[0], runinfo[2] ] )
+        jsonfl = os.path.join(ws_path, runinfo[1])
         with open(jsonfl, 'w') as ofd :
             json.dump(exec_json, ofd)
         if dryrun :
-            print('DRYRUN: os.system("ssh %s python run_exec.py %s &" % (runinfo[1], jsonfl ))')
+            shell_cmd = "ssh %s python run_exec.py %s &" % (runinfo[1], jsonfl )
+            print('DRYRUN: os.system(%s)' % shell_cmd )
         else :
+            print("launching test at %s" % (runinfo[0]))
             os.system("ssh %s python run_exec.py %s &" % (runinfo[1], jsonfl ))
-        print("launched at %s" % (runinfo[0]))
+    print("DONE launch... ")
  
 if __name__ == '__main__' :
     load_from_db()
-#    print("=== loaded tags ")
-#    pprint(overridable_tags)
 
     loader_config = sys.argv[1] if(len(sys.argv) > 1) else "loader_def.json"
     ifl = os.path.join(os.getcwd(), loader_config)
     with open(loader_config, 'r') as ldf:
         loader_def_list = json.load(ldf)
 
-    cfg_item_ids = addUserConfigs(loader_def_list)
+    cfg_items = addUserConfigs(loader_def_list)
 
-    if (cfg_item_ids) :
-        run_id = assign_host_run(cfg_item_ids)
+    if (cfg_items) :
+        run_id = assign_host_run(cfg_items)
         launch_run(run_id, dryrun=True)

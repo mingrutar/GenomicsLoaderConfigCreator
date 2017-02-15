@@ -1,6 +1,7 @@
 #! /usr/bin/bash
 
 import sys
+import os, os.path
 import re
 from pprint import pprint
 from functools import reduce
@@ -33,7 +34,35 @@ def make_col_partition(bin_num):
             "begin" : begin, "workspace" : TILE_WORKSPACE })
     return partitions
 
+working_dir = os.getcwd()
+def __proc_template( templateFile, sub_key_val = None) :
+        tf_path = templateFile.replace("$WS_HOME", working_dir)
+        if os.path.isfile(tf_path) :
+            if tf_path[-5:] == '.temp' :
+                with open(tf_path, 'r') as fd :
+                    context = fd.readlines()
+                jf_path = re.sub(".temp", ".json", tf_path) 
+                if sub_key_val:
+                    for key, val in sub_key_val.items() :
+                        context = re(key, val, context)
+                with open(jf_path, 'w') as ofd:
+                    ofd.write(context)
+                print("--converted %s to %s" % (tf_path, jf_path) )    
+                return jf_path
+            else:
+                print("--file %s exists" % tf_path)
+                return tf_path
+        else :
+            print("WARN: template file %s not found" % tf_path)
+            return None
+
 if __name__ == "__main__" :
+    for fname in ['$WS_HOME/templates/vid.json', '$WS_HOME/templates/template_vcf_header.vcf','/data/broad/samples/joint_variant_calling/broad_reference/Homo_sapiens_assembly19.fasta'] :
+        ret =__proc_template(fname)
+        print(" template=%s, ret=%s " % (fname, ret))
+    ret = __proc_template('$WS_HOME/templates/callsets.temp', '{"@data_dir@" : "/scratch/1000genome" }')
+    print(" template=callsets.temp {\"@data_dir@\" : \"/scratch/1000genome\" }s, ret=%s " % (ret))
+
     func_name = 'make_col_partition'
     print(locals())
     parts = locals()[func_name](sys.argv[1])

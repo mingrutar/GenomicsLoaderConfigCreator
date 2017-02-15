@@ -70,18 +70,18 @@ INSERT INTO loader_config_tag (name, type, default_value)
 VALUES ("vcf_output_format", 'String', "z");
 
 -- user definable columns 
-INSERT INTO loader_config_tag (name, type, default_value, user_definable) 
-VALUES ("column_partitions", "make_col_partition()", '1', 1);
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("column_partitions", "make_col_partition()", '1', 'bn', 1);
 -- unit MiB, default 100 MiB
-INSERT INTO loader_config_tag (name, type, default_value, user_definable) 
-VALUES ("size_per_column_partition", 'MB', "100", 1);
-INSERT INTO loader_config_tag (name, type, default_value, user_definable) 
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("size_per_column_partition", 'MB', "100", 'sp', 1);
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
 -- number parallel read to 1, so far 2 didn't improve' 
-VALUES ("num_parallel_vcf_files", 'Number', "1", 1);
+VALUES ("num_parallel_vcf_files", 'Number', "1", 'pf', 1);
 -- default compress. 
-INSERT INTO loader_config_tag (name, type, default_value, user_definable) 
-VALUES ("compress_tiledb_array", 'Boolean', "true", 1);
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("compress_tiledb_array", 'Boolean', "true", 'c', 1);
 -- number cells per tile
-INSERT INTO loader_config_tag (name, type, default_value, user_definable) 
-VALUES ("num_cells_per_tile", 'Number', "1000", 1);
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("num_cells_per_tile", 'Number', "1000", 'nt', 1);
 

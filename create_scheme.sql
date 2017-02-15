@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS host (
     name TEXT NOT NULL,
     type TEXT NOT NULL,
     default_value TEXT NULL,
+    tag_code TEXT NULL,
     user_definable INTEGER DEFAULT 0,
     CONSTRAINT name_uniq UNIQUE (name ) ON CONFLICT REPLACE
 );
@@ -38,63 +39,42 @@ CREATE TABLE IF NOT EXISTS template (
 CREATE TABLE IF NOT EXISTS loader_config_def (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
    name TEXT NOT NULL,
+   config TEXT NOT NULL,
    creation_ts INTEGER NOT NULL,
    CONSTRAINT name_ts_uniq UNIQUE (name) ON CONFLICT REPLACE
 );
-CREATE TABLE IF NOT EXISTS loader_item_def (
-   _id INTEGER PRIMARY KEY AUTOINCREMENT,
-   lc_id REFERENCES loader_config (_id)  ON DELETE CASCADE,
-   tag_id REFERENCES loader_config_tag (_id),
-   override_value TEXT NOT NULL,
-   CONSTRAINT tag_lc_uniq UNIQUE (lc_id, tag_id) ON CONFLICT REPLACE
-);
 ----
---- define a run, status = run through, canceled, ..?
---
---- run_flag: 0x1-use mpirun, 0x2-user_assign_host ...
+-- define a run, status = run through, canceled, ..?
+-- currently only profile with time
 ----
 CREATE TABLE IF NOT EXISTS run_def (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
-   name TEXT NOT NULL,
-   run_flag INTEGER DEFAULT 0,
-   creation_ts INTEGER NOT NULL,
-   CONSTRAINT name_ts_uniq UNIQUE (name) ON CONFLICT REPLACE
+   loader_configs TEXT NOT NULL,
+   profiler TEXT DEFAULT 'time',
+   profiler_type TEXT DEFAULT 'time',
+   creation_ts INTEGER NOT NULL
 );
 ----
 --- result and result_type describe the outcome
+--- run_flag: 0x1-use mpirun, 0x2-user_assign_host ...
 ---
 CREATE TABLE IF NOT EXISTS run_loader_host (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
-   rd_id REFERENCES run_def (_id) ,
-   lcd_id REFERENCES loader_config_def (_id) ,
-   host_id REFERENCES host (_id) ,
-   command TEXT NOT NULL,
-   command_type TEXT NOT NULL,
+   run_def_id REFERENCES run_def(_id),
+   run_flag INTEGER DEFAULT 0,
+   loader_on_host TEXT NOT NULL, 
    start_time INTEGER NOT NULL,
    end_time INTEGER NOT NULL,
    status INTEGER NOT NULL,
    result TEXT NULL, 
-   result_type TEXT NULL, 
-   CONSTRAINT lc_host_uniq UNIQUE (rd_id, lcd_id, host_id) ON CONFLICT REPLACE
+   result_type TEXT NULL 
 );
 
 --- for analysis, add partition 1 and total size for convenience
 CREATE TABLE IF NOT EXISTS time_result (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
-   start_time INTEGER NOT NULL,
-   command TEXT NOT NULL,
-   user_time REAL NOT NULL,
-   system_time REAL NOT NULL,
-   pCPU INTEGER NOT NULL,
-   wall_clock REAL NOT NULL,
-   maximum_resident INTEGER NOT NULL,
-   average_resident INTEGER NOT NULL,
-   major_page_fault INTEGER NOT NULL,
-   minor_page_fault INTEGER NOT NULL,
-   voluntary_context_switches INTEGER NOT NULL,
-   involuntary_context_switches INTEGER NOT NULL,
-   exit_status INTEGER NOT NULL,
+   run_id REFERENCES run_loader_host (_id),
+   log_text TEXT NOT NULL,
    partition_1_size INTEGER DEFAULT 0,
-   db_size INTEGER DEFAULT 0,
-   run_id REFERENCES run_loader_host (_id)
+   db_size INTEGER DEFAULT 0
 );
