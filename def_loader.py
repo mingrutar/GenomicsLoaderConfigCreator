@@ -85,7 +85,9 @@ def load_from_db() :
         overridable_tags[row[0]] = list(row)
 
     for row in mycursor.execute(db_queries['Select_user_lc']) :
-        cfg = json.loads(row[1].replace("'", "\"") )
+        line = row[1].replace("u'", "\"").replace("'", "\"")
+        print("line=%s" % line)
+        cfg = json.loads( line )
         defined_loaders[row[0]] = (cfg, row[2])  
     for row in mycursor.execute(db_queries['Select_defined_run']) :
         defined_runs[row[0]] = row[1]
@@ -151,8 +153,7 @@ def assign_host_run(lcdef_list) :
 def __make_path(target_path) :
     if os.path.exists(target_path) :
         shutil.rmtree(target_path)
-    else:
-        os.makedirs(target_path)
+    os.makedirs(target_path)
 
 def __str2num(x) :
     try:
