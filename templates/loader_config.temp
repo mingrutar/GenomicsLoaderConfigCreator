@@ -1,0 +1,27 @@
+{
+    "row_based_partitioning" : false,
+    "produce_combined_vcf": false,
+    "produce_tiledb_array" : true,
+    "column_partitions" :  [
+        {"begin":0, "workspace":"@genome_ws@", "array":"@array_name@"  }
+    ],
+    "vid_mapping_file" : "/home/mingrutar/myRunTests/@broad_vid@",
+    "callset_mapping_file" : "/home/mingrutar/myRunTests/@callset@",
+    "size_per_column_partition": "@spcp@",
+    "treat_deletions_as_intervals" : true,
+    "vcf_header_filename": "/home/mingrutar/myRunTests/template_vcf_header.vcf",
+    "reference_genome" : "/data/broad/samples/joint_variant_calling/broad_reference/Homo_sapiens_assembly19.fasta",
+    "num_parallel_vcf_files" : "@npallvcf@",
+    "do_ping_pong_buffering" : true,
+    "offload_vcf_output_processing" : true,
+    "ub_callset_row_idx" : 999,
+    "discard_vcf_index" : true,
+    "produce_combined_vcf": false,
+    "vcf_output_format" : "z",
+    "produce_tiledb_array" : true,
+    "compress_tiledb_array": "@comp_ta@",
+    "tiledb_compression_level": 6,
+    "disable_synced_writes": true,
+    "delete_and_create_tiledb_array" : true,
+    "vcf_output_filename" : [ "/mnt/app_hdd1/tiledb-ws-011917/part0.vcf.gz" ]
+}
