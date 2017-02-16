@@ -13,6 +13,7 @@ one_MB = 1048576
 TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 TARGET_TEST_COMMAND = "vcf2tiledb"
 MPIRUN = "/opt/openmpi/bin/mpirun"
+RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
 
 db_queries = {"Host" : 'SELECT hostname FROM host WHERE avalability = 1',
     "LC_Tag" : 'SELECT name, type, default_value FROM loader_config_tag where user_definable=0',
@@ -177,7 +178,7 @@ def make_col_partition(bin_num):
     begin = 0
     for item in hgram:
         if subtotal == 0 :
-            begin = item[0]
+            begin = int(item[0])
         subtotal += item[2]
         if (parnum < bin_num-1) and (subtotal > bin_size) :
             partitions.append({"array" :"TEST%d" % parnum,
@@ -251,11 +252,11 @@ def launch_run( run_id, use_mpirun=True, dryrun=False) :
         with open(jsonfl, 'w') as ofd :
             json.dump(exec_json, ofd)
         if dryrun :
-            shell_cmd = "ssh %s python run_exec.py %s &" % (runinfo[1], jsonfl )
+            shell_cmd = "ssh %s python %s %s &" % (runinfo[1], RUN_SCRIPT, jsonfl )
             print('DRYRUN: os.system(%s)' % shell_cmd )
         else :
             print("launching test at %s" % (runinfo[0]))
-            os.system("ssh %s python run_exec.py %s &" % (runinfo[1], jsonfl ))
+            os.system("ssh %s python %s %s &" % (runinfo[1], RUN_SCRIPT, jsonfl ))
     print("DONE launch... ")
  
 if __name__ == '__main__' :
