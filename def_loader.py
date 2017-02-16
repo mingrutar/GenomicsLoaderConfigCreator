@@ -247,7 +247,7 @@ def launch_run( run_id, use_mpirun=True, dryrun=False) :
     __make_path(ws_path)
     for runinfo in launch_info :
         exec_json = dict({ 'run_id' : run_id })
-        exec_json['cmd'] = list( [ runinfo[0], runinfo[2] ] )
+        exec_json['cmd'] = runinfo[0]
         jsonfl = os.path.join(ws_path, runinfo[1])
         with open(jsonfl, 'w') as ofd :
             json.dump(exec_json, ofd)
