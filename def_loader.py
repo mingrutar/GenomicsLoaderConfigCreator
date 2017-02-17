@@ -11,7 +11,7 @@ import shutil
 
 one_MB = 1048576
 TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
-TARGET_TEST_COMMAND = "vcf2tiledb"
+TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb"
 MPIRUN = "/opt/openmpi/bin/mpirun"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
 
@@ -256,7 +256,7 @@ def launch_run( run_id, use_mpirun=True, dryrun=False) :
             print('DRYRUN: os.system(%s)' % shell_cmd )
         else :
             print("launching test at %s" % (runinfo[0]))
-            os.system("ssh %s python %s %s &" % (runinfo[1], RUN_SCRIPT, jsonfl ))
+            os.system("ssh %s %s %s &" % (runinfo[1], RUN_SCRIPT, jsonfl ))
     print("DONE launch... ")
  
 if __name__ == '__main__' :

@@ -76,5 +76,6 @@ CREATE TABLE IF NOT EXISTS time_result (
    run_id REFERENCES run_loader_host (_id),
    log_text TEXT NOT NULL,
    partition_1_size INTEGER DEFAULT 0,
-   db_size INTEGER DEFAULT 0
+   db_size INTEGER DEFAULT 0,
+   pidstat_path TEXT
 );
