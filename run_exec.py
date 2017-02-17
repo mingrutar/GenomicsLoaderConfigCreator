@@ -81,7 +81,8 @@ def pidstat2cvs(ifile, of_prefix) :
         ofd.write("ts, rs, ws,ccws\n")
         [ ofd.write("%s\n" % ','.join(data)  ) for data in val ]
         ofd.close()
-
+    os.remove(ifile)
+    
 if __name__ == '__main__' :
     jsonfl_path = sys.argv[1]
     with open(jsonfl_path, 'r') as ldf:
