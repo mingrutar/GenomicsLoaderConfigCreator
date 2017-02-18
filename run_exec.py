@@ -1,9 +1,9 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 import sys
 import os
 from pprint import pprint
 from collections import deque
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, check_output
 import json
 import platform
 import sqlite3
@@ -18,14 +18,25 @@ DEVNULL = open(os.devnull, 'wb', 0)
 time_format="-f cmd:%C,elapse_sec:%e,CPU_sec:%P,major_pf:%F,minor_pf:%R,v_cs:%w,fs_input:%I,fs_output:%O,iv_cs:%c,exit_sts:%x"
 working_path = os.getcwd()
 
+def startPidStats(run_cmd ) :
+  known_cmds = ['vcf2tiledb', 'gt_mpi_gather']
+  exec_name = None
+  for ge_exec in known_cmds:
+    if ge_exec in run_cmd :
+      exec_name = ge_exec
+      break
+  if exec_name :
+    pidlist = check_output(['/usr/bin/pgrep', exec_name])
+    pidstr = ','.join(pidlist)
+    pstat = Popen(['/usr/bin/pidstat', '-dl', '1', '-p', '%s' % pidstr ], stdout=fdlog, stderr=fdlog) 
+
 def measure_more( cmd, logfile ) :
   fdlog = open(logfile, 'w', 0)
   time_lines_count = 1     # how many lines /usr/bin/time produces
   theExecCmd = ['/usr/bin/time', time_format] + cmd
-#  print("executing command %s " % (str(theExecCmd)))
   pexec = Popen(theExecCmd, shell=False, stdout=DEVNULL, stderr=PIPE) 
-  pstat = Popen(['/usr/bin/pidstat', '-dl', '1', '-p', '%s' % pexec.pid ], stdout=fdlog, stderr=fdlog) 
-#  print("pid_pexec=%s, pid_pstat=%s" % (pexec.pid, pstat.pid))
+  pstat = startPidStats(cmd)
+  print("executing command %s, pexec-pid=%s, pstat.pid=%s " % (str(theExecCmd), pexec.pid, pstat.pid))
 
   with pexec.stderr:
     qexec = deque(iter(pexec.stderr.readline, b''), maxlen=time_lines_count)
@@ -107,7 +118,7 @@ if __name__ == '__main__' :
       cvsfile = [ os.path.basename(x) for x in l ]
       db_path = os.path.join(working_dir, 'genomicsdb_loader.db')
       if os.path.isfile(db_path) :
-        save_time_log(db_path, exec_json['run_id'], time_nval, '*'.join(cvsfile))
+        save_time_log(db_path, exec_json['run_id'], time_nval, cvsfile)
       else :
         print("not found %s" % db_path)
     
