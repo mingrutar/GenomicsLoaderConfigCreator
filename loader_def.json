@@ -1,4 +1,6 @@
 [
-    {"column_partitions" : 16, "size_per_column_partition": 100, "compress_tiledb_array" : "true", "num_cells_per_tile" : 1000  },
-    {"column_partitions" : 20, "size_per_column_partition": 100, "compress_tiledb_array" : "true", "num_cells_per_tile" : 1000  } 
-    ]
+    {"column_partitions" : 16, "segment_size" : [10, "KB"] },
+    {"column_partitions" : 16, "segment_size" : [100, "KB"] },
+    {"column_partitions" : 16, "segment_size" : 1 },
+    {"column_partitions" : 16, "do_ping_pong_buffering" : false }
+]

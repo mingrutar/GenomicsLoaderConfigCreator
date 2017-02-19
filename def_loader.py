@@ -9,6 +9,7 @@ from datetime import datetime
 import time
 import shutil
 
+one_KB = 1024
 one_MB = 1048576
 TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb"
@@ -104,8 +105,9 @@ def loader_name(config) :
         if key in overridable_tags and str(val) != overridable_tags[key][2]:
             if overridable_tags[key][1] == 'Boolean' :
                 name.append("%s%s" % (overridable_tags[key][3], val[:1]))
+                
             else :
-                name.append("%s%s" % (overridable_tags[key][3], val) )
+                name.append("%s%s" % (overridable_tags[key][3], val[0] if isinstance(val, list) else val ) )
         else :
             as_defaults.append(key)
     for x in as_defaults:
@@ -165,13 +167,7 @@ def __str2num(x) :
         except ValueError:
             return None
 
-def make_col_partition(bin_num):
-    bin_num = int(bin_num)
-    with open(histogram_fn, 'r') as rfd:
-        context = rfd.readlines()
-    lines = [ l.split(',') for l in context ]
-    hgram = [ (x[0], x[1], float(x[2].rstrip()) ) for x in lines if len(x) == 3 ]
-    bin_size = sum( [ x[2] for x in hgram] ) / bin_num
+def __generate_col_partition(bin_size) :
     partitions = []       
     subtotal = 0
     parnum = 0
@@ -190,14 +186,24 @@ def make_col_partition(bin_num):
             "begin" : begin, "workspace" : TILE_WORKSPACE })
     return partitions
 
+def make_col_partition(bin_num):
+    bin_num = int(bin_num)
+    with open(histogram_fn, 'r') as rfd:
+        context = rfd.readlines()
+    lines = [ l.split(',') for l in context ]
+    hgram = [ (x[0], x[1], float(x[2].rstrip()) ) for x in lines if len(x) == 3 ]
+    bin_size = sum( [ x[2] for x in hgram] ) / bin_num
+    return __generate_col_partition(bin_size)
+    
 transformer = {'String' : lambda x : x if isinstance(x, str) else None,
         'Number' : __str2num ,
         'Boolean' : lambda x: x.lower() == 'true' ,
         'Template' : lambda x: my_templates[x] , 
-        'MB' : lambda x: int(x) * one_MB }
+        'MB' : lambda x: int(x) * one_MB,
+        'KB' : lambda x : int(x) * one_KB }
 
 def __getValue(itemType, itemVal) :
-    ''' String, Number, Boolean, Template, MB, func() '''
+    ''' String, Number, Boolean, Template, MB, KB, func() '''
     if itemType in transformer:
         return transformer[itemType](itemVal)
     elif itemType[-2:] == '()':
@@ -211,14 +217,20 @@ def __genLoadConfig( lc_items, use_mpirun ) :
     ''' return json load file '''
     load_conf = {}
     mpirun_num = 1
+    # val from db tale
     for key, val in loader_tags.items() :
         load_conf[key] = __getValue(val[1], val[2])
     for key, val in overridable_tags.items() :
         if key in lc_items :
-            val[2] = lc_items[key]
+            uval = lc_items[key]
+            if isinstance(uval, list) :             # user override the type 
+                load_conf [key] = __getValue( uval[1], uval[0])
+            else :
+                load_conf [key] = __getValue( val[1], uval)
             if key == "column_partitions" and use_mpirun :
                 mpirun_num = int(lc_items[key])
-        load_conf [key] = __getValue( val[1], val[2])
+        else :                      # use default
+            load_conf [key] = __getValue( val[1], val[2])
     return load_conf, mpirun_num 
  
 def __prepare_run (run_id, target_cmd, use_mpirun) :

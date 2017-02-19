@@ -1,4 +1,5 @@
 #! /usr/bin/python3
+
 import sys
 import os
 from pprint import pprint
@@ -17,6 +18,24 @@ TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 DEVNULL = open(os.devnull, 'wb', 0)
 time_format="-f cmd:%C,elapse_sec:%e,CPU_sec:%P,major_pf:%F,minor_pf:%R,v_cs:%w,fs_input:%I,fs_output:%O,iv_cs:%c,exit_sts:%x"
 working_path = os.getcwd()
+
+genome_profile_tags = {'Fetch from VCF' : 'fv', 
+    'Combining cells' :'cc',
+    'Flush output': 'fo',
+     'Sections time' : 'st',
+     'Time in single thread phase()' : 'ts',
+     'Time in read_all()' : 'tr'}
+
+def __proc_gen_result(geno_str) :
+    ret = {}
+    lines = geno_str.split(',')
+    ret['op'] = genome_profile_tags[lines[1]]
+    ret['wc'] = lines[3]
+    ret['ct'] = lines[5]
+    ret['cwc'] = lines[7]
+    ret['cct'] = lines[9]
+    ret['ncp'] = lines[11]
+    return ret
 
 def startPidStats(run_cmd ) :
   known_cmds = ['vcf2tiledb', 'gt_mpi_gather']
@@ -39,19 +58,26 @@ def measure_more( cmd, logfile ) :
   print("executing command %s, pexec-pid=%s, pstat.pid=%s " % (str(theExecCmd), pexec.pid, pstat.pid))
 
   with pexec.stderr:
-    qexec = deque(iter(pexec.stderr.readline, b''), maxlen=time_lines_count)
+    qexec = deque(iter(pexec.stderr.readline, b''))
+#    qexec = deque(iter(pexec.stderr.readline, b''), maxlen=time_lines_count)
   rc = pexec.wait()
   fdlog.close()
   pstat.kill()
-  retStr = b''.join(qexec).decode().strip() 
-#  print( "retStr=%s" % retStr )
-  name_val = dict(x.split(':') for x in retStr.split(','))
-  return name_val
 
-INSERT_TIME ="INSERT INTO time_result (run_id, log_text, partition_1_size, db_size, pidstat_path) \
- VALUES (%s, \"%s\", %d, %d, \"%s\");"
-def save_time_log(db_path, run_id, time_output, pidstat_cvs) :
-    stmt = INSERT_TIME % (run_id, str(time_output), 0, 0, pidstat_cvs)
+  # last is of time
+  time_result = __proc_time_result(qexec.pop().decode().strip()) 
+  genome_result = []
+  for gl in qexec:
+    #TODO: reformat
+    line = gl.decode().strip()
+    gr = __proc_gen_result(line)
+    genome_result.append(gl)
+  return time_result, genome_result 
+
+INSERT_TIME ="INSERT INTO time_result (run_id, time_result, partition_1_size, db_size, pidstat_path, genome_result) \
+ VALUES (%s, \"%s\", %d, %d, \"%s\",  \"%s\");"
+def save_time_log(db_path, run_id, time_output, genome_output, pidstat_cvs) :
+    stmt = INSERT_TIME % (run_id, str(time_output), str(genome_output), 0, 0, pidstat_cvs)
     print(stmt)
     db_conn = sqlite3.connect(db_path)
     crs = db_conn.cursor()
@@ -108,7 +134,7 @@ if __name__ == '__main__' :
       log_fn = "%d-%s_%s_pid.log" % (exec_json['run_id'], datetime.now().strftime("%y%m%d%H%M"), os.path.basename(jsonfl_path)[-4:])
       log2path = os.path.join(os.path.dirname(jsonfl_path), log_fn)
       print("pidstat.log=%s" % log2path)
-      time_nval = measure_more(target_cmd, log2path)
+      time_nval,genome_time = measure_more(target_cmd, log2path)
 
       stat_path = os.path.join(working_dir, 'stats')
       if not os.path.isdir(stat_path) :
@@ -118,7 +144,7 @@ if __name__ == '__main__' :
       cvsfile = [ os.path.basename(x) for x in l ]
       db_path = os.path.join(working_dir, 'genomicsdb_loader.db')
       if os.path.isfile(db_path) :
-        save_time_log(db_path, exec_json['run_id'], time_nval, cvsfile)
+        save_time_log(db_path, exec_json['run_id'], time_nval, genome_time, cvsfile)
       else :
         print("not found %s" % db_path)
     
