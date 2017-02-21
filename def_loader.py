@@ -167,7 +167,13 @@ def __str2num(x) :
         except ValueError:
             return None
 
-def __generate_col_partition(bin_size) :
+def make_col_partition(bin_num):
+    bin_num = int(bin_num)
+    with open(histogram_fn, 'r') as rfd:
+        context = rfd.readlines()
+    lines = [ l.split(',') for l in context ]
+    hgram = [ (x[0], x[1], float(x[2].rstrip()) ) for x in lines if len(x) == 3 ]
+    bin_size = sum( [ x[2] for x in hgram] ) / bin_num
     partitions = []       
     subtotal = 0
     parnum = 0
@@ -186,15 +192,6 @@ def __generate_col_partition(bin_size) :
             "begin" : begin, "workspace" : TILE_WORKSPACE })
     return partitions
 
-def make_col_partition(bin_num):
-    bin_num = int(bin_num)
-    with open(histogram_fn, 'r') as rfd:
-        context = rfd.readlines()
-    lines = [ l.split(',') for l in context ]
-    hgram = [ (x[0], x[1], float(x[2].rstrip()) ) for x in lines if len(x) == 3 ]
-    bin_size = sum( [ x[2] for x in hgram] ) / bin_num
-    return __generate_col_partition(bin_size)
-    
 transformer = {'String' : lambda x : x if isinstance(x, str) else None,
         'Number' : __str2num ,
         'Boolean' : lambda x: x.lower() == 'true' ,
