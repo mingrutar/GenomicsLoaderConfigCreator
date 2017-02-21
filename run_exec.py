@@ -87,7 +87,7 @@ def save_time_log(db_path, run_id, time_output, genome_output, pidstat_cvs) :
     db_conn.close()
 
 def run_pre_test(working_dir, tiledb_root) :
-  pre_test = os.path.join(working_dir, 'prelaunch_chec.bash')
+  pre_test = os.path.join(working_dir, 'prelaunch_check.bash')
   if os.path.isfile(pre_test) :
     pid = Popen([pre_test, tiledb_root], stdout=PIPE, stderr=PIPE)
     out, err = pid.communicate()
