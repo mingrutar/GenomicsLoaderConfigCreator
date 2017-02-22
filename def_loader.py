@@ -88,8 +88,7 @@ def load_from_db() :
 
     for row in mycursor.execute(db_queries['Select_user_lc']) :
         line = row[1].replace("u'", "\"").replace("'", "\"")
-        print("line=%s" % line)
-        cfg = json.loads( line )
+        cfg = eval( line )
         defined_loaders[row[0]] = (cfg, row[2])  
     for row in mycursor.execute(db_queries['Select_defined_run']) :
         defined_runs[row[0]] = row[1]
@@ -102,12 +101,14 @@ def loader_name(config) :
     as_defaults = []
     for key in sorted(config.keys()):
         val = config[key]
+        
         if key in overridable_tags and str(val) != overridable_tags[key][2]:
             if overridable_tags[key][1] == 'Boolean' :
-                name.append("%s%s" % (overridable_tags[key][3], val[:1]))
-                
-            else :
-                name.append("%s%s" % (overridable_tags[key][3], val[0] if isinstance(val, list) else val ) )
+                name.append("%s%s" % (overridable_tags[key][3], 't' if val else 'f'))
+            elif isinstance(val, list):
+                name.append("%s%s%s" % (overridable_tags[key][3], val[0], val[1][:2])) 
+            else:
+                name.append("%s%s" % (overridable_tags[key][3], val))
         else :
             as_defaults.append(key)
     for x in as_defaults:
@@ -127,11 +128,11 @@ def addUserConfigs(user_defined) :
                 stmt = db_queries['INSERT_LOADER'] % (lcname, str(config), int(time.time()) )
                 mycursor.execute(stmt)
                 loader_id = mycursor.lastrowid
+                db_conn.commit()
                 defined_loaders[lcname] = (config, loader_id) 
             user_loader_conf_def[lcname] = defined_loaders[lcname][0]
             ret_val.append(lcname)
         if db_conn:
-            db_conn.commit()
             db_conn.close()
         return ret_val
     else :
@@ -194,7 +195,7 @@ def make_col_partition(bin_num):
 
 transformer = {'String' : lambda x : x if isinstance(x, str) else None,
         'Number' : __str2num ,
-        'Boolean' : lambda x: x.lower() == 'true' ,
+        'Boolean' : lambda x: x if isinstance(x, bool) else x.lower() == 'true' ,
         'Template' : lambda x: my_templates[x] , 
         'MB' : lambda x: int(x) * one_MB,
         'KB' : lambda x : int(x) * one_KB }

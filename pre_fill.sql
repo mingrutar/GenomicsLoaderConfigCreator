@@ -81,7 +81,7 @@ VALUES ("compress_tiledb_array", 'Boolean', "true", 'c', 1);
 INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
 VALUES ("num_cells_per_tile", 'Number', "1000", 'nt', 1);
 ---added after feb 17
-INSERT INTO loader_config_tag (name, type, default_value) 
-VALUES ("segment_size", 'KB', "10240");
-INSERT INTO loader_config_tag (name, type, default_value) 
-VALUES ("do_ping_pong_buffering", 'Boolean', "true");
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("segment_size", 'MB', "10", 'sg', 1);
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("do_ping_pong_buffering", 'Boolean', "true", 'pb', 1);
