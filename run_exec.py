@@ -99,7 +99,7 @@ def measure_more( cmd, logfile ) :
   else:
     print("ERROR @{}: failed exec. cmd={}".format(hostname, theExecCmd) )
 
-INSERT_TIME ="INSERT INTO time_result (run_id, time_result, partition_1_size, db_size, pidstat_path, genome_result) \
+INSERT_TIME ="INSERT INTO time_result (run_id, time_result, genome_result, partition_1_size, db_size, pidstat_path) \
  VALUES (%s, \"%s\", \"%s\", %d, %d, \"%s\");"
 def save_time_log(db_path, run_id, time_output, genome_output, pidstat_cvs) :
     stmt = INSERT_TIME % (run_id, str(time_output), str(genome_output), 0, 0, pidstat_cvs)

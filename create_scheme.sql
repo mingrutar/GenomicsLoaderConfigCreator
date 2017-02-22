@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS template (
  );
 --
 -- define loader_config <=> a .json file under loaders/
---
+--con
 CREATE TABLE IF NOT EXISTS loader_config_def (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
    name TEXT NOT NULL,

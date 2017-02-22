@@ -16,14 +16,14 @@ TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb"
 MPIRUN = "/opt/openmpi/bin/mpirun"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
 
-db_queries = {"Host" : 'SELECT hostname FROM host WHERE avalability = 1',
-    "LC_Tag" : 'SELECT name, type, default_value FROM loader_config_tag where user_definable=0',
-    "LC_OverrideTag" : 'SELECT name, type, default_value,tag_code FROM loader_config_tag where user_definable=1',
-    "Template" : 'SELECT name, file_path, params, extra FROM template',
-    'Select_user_lc' : 'SELECT name, config, _id from loader_config_def',
-    'Select_defined_run' : 'SELECT _id, loader_configs from run_def',
-    'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config, creation_ts) VALUES (\"%s\", \"%s\", %d)",
-    'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, creation_ts) VALUES (\"%s\", %d)'
+db_queries = {"Host" : 'SELECT hostname FROM host WHERE avalability = 1;',
+    "LC_Tag" : 'SELECT name, type, default_value FROM loader_config_tag where user_definable=0;',
+    "LC_OverrideTag" : 'SELECT name, type, default_value,tag_code FROM loader_config_tag where user_definable=1;',
+    "Template" : 'SELECT name, file_path, params, extra FROM template;',
+    'Select_user_lc' : 'SELECT name, config, _id from loader_config_def;',
+    'Select_defined_run' : 'SELECT _id, loader_configs from run_def;',
+    'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config, creation_ts) VALUES (\"%s\", \"%s\", %d);",
+    'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, creation_ts) VALUES (\"%s\", %d);'
 }
 # look up 
 my_hostlist = []
@@ -39,6 +39,7 @@ run_config = {}                 # { uuid : [ (host, lcdef) ] }
 
 histogram_fn = None
 working_dir = os.environ.get('WS_HOME', os.getcwd())
+db_name = 'genomicsdb_loader.db'
 
 def __proc_template( templateFile, sub_key_val = None, extra_args = None) :
     def histogram (val):
@@ -66,7 +67,7 @@ def __proc_template( templateFile, sub_key_val = None, extra_args = None) :
         return None
 
 def load_from_db() :
-    db_conn = sqlite3.connect('genomicsdb_loader.db')
+    db_conn = sqlite3.connect(db_name)
     mycursor = db_conn.cursor()
     mycursor.execute(db_queries["Host"])
     rows = list(mycursor.fetchall())
@@ -123,7 +124,8 @@ def addUserConfigs(user_defined) :
             lcname = loader_name(config)
             if lcname not in defined_loaders:
                 if not db_conn:
-                    db_conn = sqlite3.connect('genomicsdb_loader.db')
+                    db_conn = sqlite3.connect(db_name)
+
                 mycursor = db_conn.cursor()
                 stmt = db_queries['INSERT_LOADER'] % (lcname, str(config), int(time.time()) )
                 mycursor.execute(stmt)
@@ -144,12 +146,12 @@ def assign_host_run(lcdef_list) :
     run_list = []
     for i in range(len(lcdef_list)) :
         run_list.append( (my_hostlist[i % host_num], lcdef_list[i])  )
-    db_conn = sqlite3.connect('genomicsdb_loader.db')
+    db_conn = sqlite3.connect(db_name)
     mycursor = db_conn.cursor()
     stmt = db_queries['INSERT_RUN_DEF'] % ("-".join(lcdef_list), int(time.time()) )
     mycursor.execute(stmt)
     run_id = mycursor.lastrowid
-    db_conn.commit
+    db_conn.commit()
     db_conn.close()
     run_config[run_id] = run_list
     return run_id
