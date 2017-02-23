@@ -59,7 +59,7 @@ def startPidStats(run_cmd, fdlog ) :
 #    print("type(pidlist)={}, pidlist={}".format(type(pidlist), pidlist))
     pidstr = pidlist.decode('utf-8').replace('\n', ',')
 #    print("INFO @{}: pid for {} are {}".format(hostname, exec_name, pidstr))
-    pstat = Popen(['/usr/bin/pidstat', '-dl', '1', '-p', pidstr ], stdout=fdlog, stderr=fdlog)
+    pstat = Popen(['/usr/bin/pidstat', '-hdIlruw', '1', '-p', pidstr ], stdout=fdlog, stderr=fdlog)
   else:
     print('WARN @{}: did not find exec like {}'.format(hostname, ', '.join(known_cmds)))
   return pstat
