@@ -123,19 +123,17 @@ def run_pre_test(working_dir, tiledb_root) :
     return None
 
 def pidstat2cvs(ifile, of_prefix) :
-    def __to_epoch(timestrs) :
-        ''' timestrs = [ 'hh:mm:ss', 'A|PM' ] '''
-        thetime = '%s %s %s' % (time.strftime('%d%m%y'), timestrs[0], timestrs[1])
-        epochtime = time.mktime(time.strptime(thetime, '%d%m%y %I:%M:%S %p'))
-        return epochtime
+    extract_fields = lambda l: [ l[i] for i in [0, 6,7,12, 13,14,17 ] ]
     with open(ifile, 'r') as fd:
         lines = fd.readlines()
-    linelist = [ x.split()  for x in lines[3:] ]
+    header = extract_fields( lines[2][1:].split() )
+    dataline = [ l for l in lines[3:] if l[0] != '#' and len(l) > 20 ]
+    linelist = [ x.split()  for x in dataline ]
     # find all unique (UID, PID)
-    proc_set = set(map(tuple, [ x[2:4] for x in linelist] ))
+    proc_set = set(map(tuple, [ x[1:3] for x in linelist] ))
     pid_output = {}
     for pp in proc_set:
-        pid_output[pp] = [ (str(__to_epoch(x[0:2])), x[4:7][0], x[4:7][1], x[4:7][2] ) for x in linelist if tuple(x[2:4]) == pp ]
+        pid_output[pp] = [ extract_fields(x) for x in linelist if tuple(x[1:3]) == pp ]
 
     cvs_pids = []
     for key, val in pid_output.items() :

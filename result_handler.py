@@ -121,7 +121,7 @@ class TimeResultHandler(object):
             'Critical path Cpu time(s)', '#critical path']
     def get_genome_results(self, runid, subidStr):
         self.__get_all_result(runid)
-        subid = int(subidStr.split("_")[0]
+        subid = int(subidStr.split("_")[0])
         rows = []
         if subid < len(self.__all_results):
             for gtimes in self.__all_results[subid]['gtime'] :      # list
