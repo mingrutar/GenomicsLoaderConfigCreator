@@ -249,7 +249,7 @@ def __prepare_run (run_id, target_cmd, use_mpirun) :
             ret.append((theCommand, host, jsonfn) )   
     return (run_id, ret)
 
-def launch_run( run_id, use_mpirun=True, dryrun=False) :
+def launch_run( run_id, use_mpirun=False, dryrun=False) :
     ''' assign host to loader_config. 
     1) not support run on multi hosts, 2) allow user assign host '''
     run_id, launch_info = __prepare_run(run_id, TARGET_TEST_COMMAND, use_mpirun)

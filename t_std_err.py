@@ -5,6 +5,7 @@ import sys
 import time
 
 def eprint(*args, **kwargs):
+    ''' print to stderr '''
     print(*args, file=sys.stderr, **kwargs)
 
 time.sleep(1)
