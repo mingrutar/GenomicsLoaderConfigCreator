@@ -16,7 +16,8 @@ PIDSTAT_INTERVAL = 1        #1 sec
 TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 
 DEVNULL = open(os.devnull, 'wb', 0)
-time_format="-f cmd:%C,elapse_sec:%e,CPU_sec:%P,major_pf:%F,minor_pf:%R,v_cs:%w,fs_input:%I,fs_output:%O,iv_cs:%c,exit_sts:%x"
+#time_format="-f cmd:%C,elapse_sec:%e,CPU_sec:%P,major_pf:%F,minor_pf:%R,v_cs:%w,fs_input:%I,fs_output:%O,iv_cs:%c,exit_sts:%x"
+time_format="-f 0:%C,1:%e,2:%P,3:%F,4:%R,5:%w,6:%I,7:%O,8:%c,9:%x"
 working_path = os.getcwd()
 hostname = platform.node().split('.')[0]
  
@@ -38,11 +39,11 @@ def __proc_gen_result(geno_str) :
       else:
         print('WARN @%s: operation string %s not found' % (hostname, op_str))
         ret['op'] = op_str.replace(' ', '_')
-      ret['wc'] = lines[3]
-      ret['ct'] = lines[5]
-      ret['cwc'] = lines[7]
-      ret['cct'] = lines[9]
-      ret['ncp'] = lines[11]
+      ret['0'] = lines[3]
+      ret['1'] = lines[5]
+      ret['2'] = lines[7]
+      ret['3'] = lines[9]
+      ret['4'] = lines[11]
       return ret
     else:
       print("INFO @%s: not GENOMICSDB_TIMER, ignored: " % (hostname, geno_str))

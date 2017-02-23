@@ -6,6 +6,7 @@
 # get genome results - table row = a stage
 # duration view: bin-view x - stages, y - duration 
 import sqlite3
+import pandas as pd
 
 class TimeResultHandler(object):
     queries = {
@@ -27,7 +28,6 @@ class TimeResultHandler(object):
             return int(row[1]), row[0].split('-')
         return None
 
-    #TODO: make last run as default
     def get_run_setting(self, runid=-1):
         ''' runid = -1 means the last run '''
         col_header = []
@@ -91,8 +91,7 @@ class TimeResultHandler(object):
       'File System Input' : 'fs_input', 'File System Output' : 'fs_output',
       'Involunteer Context Switch' : 'iv_cs', 'Volunteer Context Switch' : 'v_cs',
       'Exit Code' : 'exit_sts'}
-
-    def get_time_result(self, runid):
+    def get_time_result_0(self, runid):
         self.__get_all_result(runid)
         time4plot = list()
         for dspname, strname in self.time_labels.items():
@@ -100,6 +99,41 @@ class TimeResultHandler(object):
                 time4plot.append( (dspname, [ r['rtime'][strname] for r in self.__all_results]) )
         col_header = [ "RUN_%d" % (x+1) for x in range(len(self.__all_results)) ]
         return time4plot, col_header
+
+    row_labels =['Command', 'Wall Clock (sec)', 'CPU %','Major Page Fault', 'Minor Page Fault', 
+         'File System Input', 'File System Output', 'Involunteer Context Switch', 'Volunteer Context Switch','Exit Code']
+    def get_time_result(self, runid):
+        self.__get_all_result(runid)
+        col_arrays = [ [] ] * len(row_labels) 
+        col_header = []
+        for i, run in enumerate(self.__all_results['rtime']):
+            col_header.append("RUN_%d" % (i+1))
+            for key, val in run.items():
+                col_arrays[int(key)].append(val)
+        data = zip(row_labels, col_arrays)
+        return data, col_header
+
+    genome_db_tags = {'fv' : 'Fetch from VCF',
+    'cc' : 'Combining Cells', 'fo' : 'Flush Output',
+    'st' : 'sections time', 'ts' : 'time in single thread phase()',
+    'tr' : 'time in read_all()'}
+    gtime_col_header = ['Wall-clock time(s)', 'Cpu time(s)', 'Critical path wall-clock time(s)', 
+            'Critical path Cpu time(s)', '#critical path']
+    def get_genome_results(self, runid, subidStr):
+        self.__get_all_result(runid)
+        subid = int(subidStr.split("_")[0]
+        rows = []
+        if subid < len(self.__all_results):
+            for gtimes in self.__all_results[subid]['gtime'] :      # list
+                row_list = [0.0] * len(col_header)
+                for key, val in gtimes.items():
+                    if key != 'op':
+                        row_list[int(key)-1] = val
+                rows.append((genome_db_tags[gtimes['op']], row_list))
+            return rows, self.gtime_col_header
+        else:
+            print("Run with %s not found. ")
+            return None
 
     def get_pidstats(self, runid):
         self.__get_all_result(runid)
