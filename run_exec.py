@@ -16,8 +16,6 @@ PIDSTAT_INTERVAL = 1        #1 sec
 TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 
 DEVNULL = open(os.devnull, 'wb', 0)
-#time_format="-f cmd:%C,elapse_sec:%e,CPU_sec:%P,major_pf:%F,minor_pf:%R,v_cs:%w,fs_input:%I,fs_output:%O,iv_cs:%c,exit_sts:%x"
-time_format="-f 0:%C,1:%e,2:%P,3:%F,4:%R,5:%w,6:%I,7:%O,8:%c,9:%x"
 working_path = os.getcwd()
 hostname = platform.node().split('.')[0]
  
@@ -68,7 +66,7 @@ def startPidStats(run_cmd, fdlog ) :
 
 def measure_more( cmd, logfile ) :
   time_lines_count = 6     # how many lines /usr/bin/time produces
-  theExecCmd = ['/usr/bin/time', time_format] + cmd
+  theExecCmd = ['/usr/bin/time', "-f", "0:%C,1:%e,2:%P,3:%F,4:%R,5:%w,6:%I,7:%O,8:%c,9:%x"] + cmd
   pexec = Popen(theExecCmd, shell=False, stdout=DEVNULL, stderr=PIPE)
   if pexec:
 #    print("**1* INFO @%s: launched time 4 cmd=%s" % (hostname, cmd))
@@ -96,7 +94,6 @@ def measure_more( cmd, logfile ) :
       else:
         print("INFO @%s: empty line %i " % (hostname, i))
     return time_result, genome_result
-
   else:
     print("ERROR @{}: failed exec. cmd={}".format(hostname, theExecCmd) )
 
