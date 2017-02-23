@@ -136,7 +136,7 @@ def pidstat2cvs(ifile, of_prefix) :
     for key, val in pid_output.items() :
         ofile = "%s_%s.cvs" % (of_prefix, key[1])
         ofd = open(ofile, 'w')
-        ofd.write("ts, rs, ws,ccws\n")
+        ofd.write("%s\n" % ','.join(header) )
         [ ofd.write("%s\n" % ','.join(data)  ) for data in val ]
         ofd.close()
         cvs_pids.append(ofile)
