@@ -1,0 +1,180 @@
+import sqlite3
+import os, os.path
+import json
+import time
+
+class RunVCFData(object):
+    DefaultDBName = 'genomicsdb_loader.db'
+
+    __extra_data = {}
+
+    queries = {
+        "Host" : 'SELECT hostname FROM host WHERE avalability = 1;',
+        "Template" : 'SELECT name, file_path, params, extra FROM template;',
+        "LC_Tag" : 'SELECT name, type, default_value FROM loader_config_tag where user_definable=0;',
+        "LC_OverrideTag" : 'SELECT name, type, default_value,tag_code FROM loader_config_tag where user_definable=1;',
+        'AllUser_LC' : 'SELECT name, config, _id from loader_config_def;',
+        'AllRuns' : 'SELECT _id, loader_configs from run_def;',
+
+        'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config, creation_ts) VALUES (\"%s\", \"%s\", %d);",
+        'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, creation_ts) VALUES (\"%s\", %d);',
+
+        'Run_Config' : 'SELECT loader_configs, _id FROM run_def where _id=%d;',
+        'Last_Run_Config' : 'SELECT loader_configs, _id FROM run_def ORDER BY _id desc LIMIT 1;',
+        'User_Config' : 'SELECT config FROM loader_config_def where name in (%s);',
+        'Time_Results' : 'SELECT time_result, genome_result, pidstat_path FROM time_result where run_id=%d;'  }
+    
+    def getRunConfigs(self, runid, bFillFlag=True):
+        ''' fillFlag = 0 => no fill, = 1 => fill with '-'; = 2 => fill with default_value '''
+        mycursor = self.db_conn.cursor()
+        myrunid, cfg_names = self.getRunConfigNames(runid, mycursor)
+        if cfg_names:
+            query = self.queries['User_Config'] % ",".join( [ "\"%s\"" % x for x in cfg_names ] )
+            lc_items = []
+            for row in self.mycursor.execute(query):
+                lc_items.append(dict(eval(row[0])))     # user overrided tags
+            
+            if bFillFlag > 0:                # need to fill not overrided tags
+                for cfg in lc_items:
+                    for key, val in definable_tags.items():
+                        if key not in cfg:
+                            cfg[key] = str(val)
+                        else:
+                            cfg[key] = "%s*" % cfg[key]
+            return myrunid, lc_items
+        else:
+
+            return None, None
+
+    def getRunConfigNames(self, runid, cursor=None):
+        ''' return the loader config list for a run, last run if runid is None  '''
+        query = self.queries['Run_Config'] % runid if runid else self.queries['Last_Run_Config']
+        mycursor = cursor if cursor else self.db_conn.cursor()
+        for row in mycursor.execute(query):
+            return int(row[1]), row[0].split('-')
+        mycursor.close()
+        return None
+
+    def getAllResult(self, runid):
+        assert runid
+        mycursor = cursor if cursor else self.db_conn.cursor()
+        all_results = []
+        for row in self.mycursor.execute(self.queries['Time_Results'] % int(runid)):   #TODO, enumerate?
+            rowresult = dict()
+            rowresult['rtime'] = dict(eval(row[0]))
+            rowresult['gtime'] = eval(row[1])
+            rowresult['pidstat'] = eval(row[2])
+            all_results.append(rowresult)
+        return all_results
+
+    def __init__(self, db_name=None):
+        self.db_name = db_name if db_name else self.DefaultDBName 
+        self.db_conn = sqlite3.connect(self.db_name)
+
+    def getExtraData(self, extra_data_key):
+        return self.__extra_data[extra_data_key] if extra_data_key in  self.__extra_data else None
+
+    def histogram (self, val, working_dir):
+        self.__extra_data['histogram_file_path'] = val.replace("$WS_HOME", working_dir)
+
+    def __proc_template(self, working_dir, templateFile, sub_key_val = None, extra_args = None) :
+        f_path = templateFile.replace("$WS_HOME", working_dir)
+        if os.path.isfile(f_path) :
+            if f_path[-5:] == '.temp' :
+                with open(f_path, 'r') as fd :
+                    context = fd.read()
+                jf_path = "%s.json" % f_path[:-5] 
+                if sub_key_val:
+                    for key, val in sub_key_val.items() :
+                        context = context.replace(key, val)
+                    with open(jf_path, 'w') as ofd:
+                        ofd.write(context)
+                f_path = jf_path
+            if extra_args:
+                for key, val in extra_args.items():
+                    getattr(self, key)(val, working_dir) 
+            return f_path
+        else :
+            print("WARN: template file %s not found" % f_path)
+            return None
+
+    def getDBName():
+        return self.db_name if self.db_name else None
+
+    def close(self):
+        if self.db_conn:
+            self.db_conn.close()
+
+    def getHosts(self):
+        mycursor = self.db_conn.cursor()
+        mycursor.execute(self.queries["Host"])
+        rows = list(mycursor.fetchall())
+        hosts = []
+        for r in rows:
+            hosts.append(r[0])
+        mycursor.close()
+        return hosts
+    
+    def getTemplates(self, wdir):
+        mycursor = self.db_conn.cursor()
+        templates = {}
+        for r in mycursor.execute(self.queries['Template']):
+            temp_name = str(r[1]).replace("'", "\"")
+            jstrParams = json.loads(str(r[2]).replace("'", "\"")) if r[2] else None
+            jstrMore =   json.loads(str(r[3]).replace("'", "\"")) if r[3] else None
+            input_file = self.__proc_template(wdir, temp_name, jstrParams, jstrMore) 
+            templates[r[0]] = input_file if input_file else temp_name
+        mycursor.close()
+        return templates
+
+    def getUserDefinedConfigItems(self, mycursor):
+        if not mycursor:
+            mycursor = self.db_conn.cursor()
+        lc_overridable_tags={}
+        for row in mycursor.execute(self.queries['LC_OverrideTag']):
+            lc_overridable_tags[row[0]] = list(row)
+        return lc_overridable_tags
+
+    def getConfigTags(self):
+        lc_fixed_tags={}
+        mycursor = self.db_conn.cursor()
+        for row in mycursor.execute(self.queries['LC_Tag']):
+            lc_fixed_tags[row[0]] = list(row)
+        lc_overridable_tags=self.getUserDefinedConfigItems(mycursor)
+        mycursor.close()
+        return lc_fixed_tags, lc_overridable_tags         
+    
+    def getAllUserDefinedConfigItems(self):
+        defined_loaders = {}
+        mycursor = self.db_conn.cursor()
+        for row in mycursor.execute(self.queries['AllUser_LC']):
+            line = row[1].replace("u'", "\"").replace("'", "\"")
+            cfg = eval( line )
+            defined_loaders[row[0]] = (cfg, row[2])  
+        mycursor.close()
+        return defined_loaders
+    
+    def getAllRuns(self):
+        defined_runs = {}
+        mycursor = self.db_conn.cursor()
+        for row in mycursor.execute(self.queries['Select_defined_run']) :
+            defined_runs[row[0]] = row[1]
+        mycursor.close()
+        return defined_runs
+
+    def addUserDefinedConfig(self, lcname, configStr) :
+        mycursor = self.db_conn.cursor()
+        stmt = self.queries['INSERT_LOADER'] % (lcname, configStr, int(time.time()) )
+        mycursor.execute(stmt)
+        loader_id = mycursor.lastrowid
+        self.db_conn.commit()
+        mycursor.close()
+        return loader_id
+
+    def addRun(self, configs ):
+        mycursor = self.db_conn.cursor()
+        stmt = self.queries['INSERT_RUN_DEF'] % (configs, int(time.time()) )
+        mycursor.execute(stmt)
+        run_id = mycursor.lastrowid
+        self.db_conn.commit()
+        return run_id
