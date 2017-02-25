@@ -1,5 +1,4 @@
 #! /bin/python
-import sqlite3
 import sys
 import os, re
 import os.path
@@ -8,6 +7,7 @@ import uuid
 from datetime import datetime
 import time
 import shutil
+import core_data
 
 one_KB = 1024
 one_MB = 1048576
@@ -16,15 +16,6 @@ TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb"
 MPIRUN = "/opt/openmpi/bin/mpirun"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
 
-db_queries = {"Host" : 'SELECT hostname FROM host WHERE avalability = 1;',
-    "LC_Tag" : 'SELECT name, type, default_value FROM loader_config_tag where user_definable=0;',
-    "LC_OverrideTag" : 'SELECT name, type, default_value,tag_code FROM loader_config_tag where user_definable=1;',
-    "Template" : 'SELECT name, file_path, params, extra FROM template;',
-    'Select_user_lc' : 'SELECT name, config, _id from loader_config_def;',
-    'Select_defined_run' : 'SELECT _id, loader_configs from run_def;',
-    'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config, creation_ts) VALUES (\"%s\", \"%s\", %d);",
-    'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, creation_ts) VALUES (\"%s\", %d);'
-}
 # look up 
 my_hostlist = []
 my_templates = {}
@@ -37,63 +28,18 @@ defined_runs = {}           # dbid,
 user_loader_conf_def = {}       # { uuid : { tag : val} }
 run_config = {}                 # { uuid : [ (host, lcdef) ] }
 
+data_handler = core_data.RunVCFData()
 histogram_fn = None
 working_dir = os.environ.get('WS_HOME', os.getcwd())
-db_name = 'genomicsdb_loader.db'
-
-def __proc_template( templateFile, sub_key_val = None, extra_args = None) :
-    def histogram (val):
-        global histogram_fn
-        histogram_fn = val.replace("$WS_HOME", working_dir)
- 
-    f_path = templateFile.replace("$WS_HOME", working_dir)
-    if os.path.isfile(f_path) :
-        if f_path[-5:] == '.temp' :
-            with open(f_path, 'r') as fd :
-                context = fd.read()
-            jf_path = "%s.json" % f_path[:-5] 
-            if sub_key_val:
-                for key, val in sub_key_val.items() :
-                    context = context.replace(key, val)
-                with open(jf_path, 'w') as ofd:
-                    ofd.write(context)
-            f_path = jf_path
-        if extra_args:
-            for key, val in extra_args.items():
-                locals()[key](val) 
-        return f_path
-    else :
-        print("WARN: template file %s not found" % f_path)
-        return None
 
 def load_from_db() :
-    db_conn = sqlite3.connect(db_name)
-    mycursor = db_conn.cursor()
-    mycursor.execute(db_queries["Host"])
-    rows = list(mycursor.fetchall())
-    for r in rows:
-        my_hostlist.append(r[0])
-    
- #  "Template" : 'SELECT name, file_path, params FROM template' }
-    for r in mycursor.execute(db_queries['Template']):
-        temp_name = str(r[1]).replace("'", "\"")
-        jstrParams = json.loads(str(r[2]).replace("'", "\"")) if r[2] else None
-        jstrMore =   json.loads(str(r[3]).replace("'", "\"")) if r[3] else None
-        input_file = __proc_template(temp_name, jstrParams, jstrMore) 
-        my_templates[r[0]] = input_file if input_file else temp_name
-        
-    for row in mycursor.execute(db_queries['LC_Tag']):
-        loader_tags[row[0]] = list(row)
-    for row in mycursor.execute(db_queries['LC_OverrideTag']):
-        overridable_tags[row[0]] = list(row)
+    global my_hostlist, my_templates, loader_tags, overridable_tags, defined_loaders, defined_runs
+    my_hostlist = data_handler.getHosts()
+    my_templates = data_handler.getTemplates(working_dir)
+    loader_tags, overridable_tags = data_handler.getConfigTags() 
 
-    for row in mycursor.execute(db_queries['Select_user_lc']) :
-        line = row[1].replace("u'", "\"").replace("'", "\"")
-        cfg = eval( line )
-        defined_loaders[row[0]] = (cfg, row[2])  
-    for row in mycursor.execute(db_queries['Select_defined_run']) :
-        defined_runs[row[0]] = row[1]
-    db_conn.close()
+    defined_loaders = data_handler.getAllUserDefinedConfigItems()
+    defined_runs = data_handler.getAllRuns
 
 # unique name for user def 
 def loader_name(config) : 
@@ -123,14 +69,7 @@ def addUserConfigs(user_defined) :
         for config in user_defined: #  config is dict,
             lcname = loader_name(config)
             if lcname not in defined_loaders:
-                if not db_conn:
-                    db_conn = sqlite3.connect(db_name)
-
-                mycursor = db_conn.cursor()
-                stmt = db_queries['INSERT_LOADER'] % (lcname, str(config), int(time.time()) )
-                mycursor.execute(stmt)
-                loader_id = mycursor.lastrowid
-                db_conn.commit()
+                loader_id = data_handler.addUserDefinedConfig(lcname, str(config))
                 defined_loaders[lcname] = (config, loader_id) 
             user_loader_conf_def[lcname] = defined_loaders[lcname][0]
             ret_val.append(lcname)
@@ -146,13 +85,8 @@ def assign_host_run(lcdef_list) :
     run_list = []
     for i in range(len(lcdef_list)) :
         run_list.append( (my_hostlist[i % host_num], lcdef_list[i])  )
-    db_conn = sqlite3.connect(db_name)
-    mycursor = db_conn.cursor()
-    stmt = db_queries['INSERT_RUN_DEF'] % ("-".join(lcdef_list), int(time.time()) )
-    mycursor.execute(stmt)
-    run_id = mycursor.lastrowid
-    db_conn.commit()
-    db_conn.close()
+
+    run_id = data_handler.addRun( "-".join(lcdef_list) )
     run_config[run_id] = run_list
     return run_id
 
@@ -172,27 +106,34 @@ def __str2num(x) :
 
 def make_col_partition(bin_num):
     bin_num = int(bin_num)
-    with open(histogram_fn, 'r') as rfd:
-        context = rfd.readlines()
-    lines = [ l.split(',') for l in context ]
-    hgram = [ (x[0], x[1], float(x[2].rstrip()) ) for x in lines if len(x) == 3 ]
-    bin_size = sum( [ x[2] for x in hgram] ) / bin_num
     partitions = []       
-    subtotal = 0
-    parnum = 0
-    begin = 0
-    for item in hgram:
-        if subtotal == 0 :
-            begin = int(item[0])
-        subtotal += item[2]
-        if (parnum < bin_num-1) and (subtotal > bin_size) :
+
+    histogram_fn = data_handler.getExtraData('histogram_file_path')
+    if not histogram_fn:
+        # TODO: run histogram utility to generate ?
+        print("WARN: no histogram file. 1 partition only")      
+        partitions.append({"array" :"TEST0", "begin" : 0, "workspace" : TILE_WORKSPACE })
+    else:    
+        with open(histogram_fn, 'r') as rfd:
+            context = rfd.readlines()
+        lines = [ l.split(',') for l in context ]
+        hgram = [ (x[0], x[1], float(x[2].rstrip()) ) for x in lines if len(x) == 3 ]
+        bin_size = sum( [ x[2] for x in hgram] ) / bin_num
+        subtotal = 0
+        parnum = 0
+        begin = 0
+        for item in hgram:
+            if subtotal == 0 :
+                begin = int(item[0])
+            subtotal += item[2]
+            if (parnum < bin_num-1) and (subtotal > bin_size) :
+                partitions.append({"array" :"TEST%d" % parnum,
+                    "begin" : begin, "workspace" : TILE_WORKSPACE })
+                parnum += 1
+                subtotal = 0
+        if (subtotal > 0) :
             partitions.append({"array" :"TEST%d" % parnum,
                 "begin" : begin, "workspace" : TILE_WORKSPACE })
-            parnum += 1
-            subtotal = 0
-    if (subtotal > 0) :
-        partitions.append({"array" :"TEST%d" % parnum,
-            "begin" : begin, "workspace" : TILE_WORKSPACE })
     return partitions
 
 transformer = {'String' : lambda x : x if isinstance(x, str) else None,
