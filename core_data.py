@@ -27,18 +27,20 @@ class RunVCFData(object):
     def getRunConfigs(self, runid, bFillFlag=True):
         ''' fillFlag = 0 => no fill, = 1 => fill with '-'; = 2 => fill with default_value '''
         mycursor = self.db_conn.cursor()
+        definable_tags = self.getUserDefinableConfigTags(mycursor)
+
         myrunid, cfg_names = self.getRunConfigNames(runid, mycursor)
         if cfg_names:
             query = self.queries['User_Config'] % ",".join( [ "\"%s\"" % x for x in cfg_names ] )
             lc_items = []
-            for row in self.mycursor.execute(query):
+            for row in mycursor.execute(query):
                 lc_items.append(dict(eval(row[0])))     # user overrided tags
             
             if bFillFlag > 0:                # need to fill not overrided tags
                 for cfg in lc_items:
                     for key, val in definable_tags.items():
                         if key not in cfg:
-                            cfg[key] = str(val)
+                            cfg[key] = str(val[2])
                         else:
                             cfg[key] = "%s*" % cfg[key]
             return myrunid, lc_items
@@ -57,9 +59,9 @@ class RunVCFData(object):
 
     def getAllResult(self, runid):
         assert runid
-        mycursor = cursor if cursor else self.db_conn.cursor()
+        mycursor =  self.db_conn.cursor()
         all_results = []
-        for row in self.mycursor.execute(self.queries['Time_Results'] % int(runid)):   #TODO, enumerate?
+        for row in mycursor.execute(self.queries['Time_Results'] % int(runid)):   #TODO, enumerate?
             rowresult = dict()
             rowresult['rtime'] = dict(eval(row[0]))
             rowresult['gtime'] = eval(row[1])
@@ -127,7 +129,7 @@ class RunVCFData(object):
         mycursor.close()
         return templates
 
-    def getUserDefinedConfigItems(self, mycursor):
+    def getUserDefinableConfigTags(self, mycursor):
         if not mycursor:
             mycursor = self.db_conn.cursor()
         lc_overridable_tags={}
@@ -140,7 +142,7 @@ class RunVCFData(object):
         mycursor = self.db_conn.cursor()
         for row in mycursor.execute(self.queries['LC_Tag']):
             lc_fixed_tags[row[0]] = list(row)
-        lc_overridable_tags=self.getUserDefinedConfigItems(mycursor)
+        lc_overridable_tags=self.getUserDefinableConfigTags(mycursor)
         mycursor.close()
         return lc_fixed_tags, lc_overridable_tags         
     

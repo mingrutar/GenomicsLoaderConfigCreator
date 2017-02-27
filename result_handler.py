@@ -9,21 +9,24 @@ import sqlite3
 import numpy as np
 import pandas as pd
 import core_data
+import os, os.path
 
 class TimeResultHandler(object):
     def __init__(self):
         self.data_handler = core_data.RunVCFData()
+        self.__runid = None
 
     def __transform4Pandas(self, inputRows) :
         ''' inputRows = [ ]
          [{k:v, k2:v2}] => [k, k2,..], [ [v, ...], [v2,...],  ]  arrya of (label, num_row)'''
-        row_labels = inputRows[0].keys
-        ret = [[]] * len(row_labels)
-        row_idx = 0
-        for run_cfg in confgiList:
+        row_labels = [ x for x in inputRows[0].keys() ]
+        data = []
+        for i in range( len(row_labels)):
+            data.append(['-'] * len(inputRows))
+        for ri, row in enumerate(inputRows):
             for i, tag in enumerate(row_labels):
-                ret[i].append( run_cfg[tag])
-        return row_labels, ret
+                data[i][ri] = row[tag]
+        return row_labels, data
     
     def getRunSetting(self, runid=None):
         my_runid, confgiList = self.data_handler.getRunConfigs(runid)
@@ -35,46 +38,39 @@ class TimeResultHandler(object):
         my_runid, confgiList = self.data_handler.getRunConfigs(runid) 
         if confgiList:
             row_labels, data = self.__transform4Pandas(confgiList)
-            col_header = [ "RUN_%d" % (i+1) for i in range(len(confgiList))] 
-            return my_runid, zip(row_label, data), col_header
+            col_header = [ "RUN_%d" % (i+1) for i in range(len(confgiList))]
+            pddata = [ (row_labels[i], dr) for i, dr in enumerate( data) ]
+            return my_runid, pddata, col_header
         else:
             print("WARN cannot find run_id %d " % runid)
 
     def __get_all_result(self, runid):
         assert runid
-        if runid != self.__runid:
+        if runid != self.__runid or not self.__runid:
             results = self.data_handler.getAllResult(runid)
             if results:
-                self.__all_results - results
+                self.__all_results = results
                 self.__runid = runid
 
-    time_labels = {'Command' : 'cmd', 'Wall Clock (sec)' : 'elapse_sec', 'CPU %' : 'CPU_sec',
-      'Major Page Fault' : 'major_pf', 'Minor Page Fault' : 'minor_pf',
-      'File System Input' : 'fs_input', 'File System Output' : 'fs_output',
-      'Involunteer Context Switch' : 'iv_cs', 'Volunteer Context Switch' : 'v_cs',
-      'Exit Code' : 'exit_sts'}
-    def get_time_result_0(self, runid):
-        self.__get_all_result(runid)
-        time4plot = list()
-        for dspname, strname in self.time_labels.items():
-            if strname != 'cmd':
-                time4plot.append( (dspname, [ r['rtime'][strname] for r in self.__all_results]) )
-        col_header = [ "RUN_%d" % (x+1) for x in range(len(self.__all_results)) ]
-        return time4plot, col_header
-
-    row_labels =['Command', 'Wall Clock (sec)', 'CPU %','Major Page Fault', 'Minor Page Fault', 
+    time_row_labels =['Command', 'Wall Clock (sec)', 'CPU %','Major Page Fault', 'Minor Page Fault', 
          'File System Input', 'File System Output', 'Involunteer Context Switch', 'Volunteer Context Switch','Exit Code']
     
+    def shorten_command(self, line):
+        llst = [  os.path.basename(cl) for cl in line.split() ]
+        return " ".join(llst)
+
     def get_time_result(self, runid):
         self.__get_all_result(runid)
-        col_arrays = [ [] ] * len(row_labels) 
         col_header = []
-        for i, run in enumerate(self.__all_results['rtime']):
-            col_header.append("RUN_%d" % (i+1))
-            for key, val in run.items():
-                col_arrays[int(key)].append(val)
-        data = zip(row_labels, col_arrays)
-        return data, col_header
+        rtimelist = []
+        for row in self.__all_results:
+            row['rtime']['0'] = self.shorten_command(row['rtime']['0'])
+            rtimelist.append(row['rtime'])
+        row_idx, data = self.__transform4Pandas(rtimelist)
+        row_labels = [ self.time_row_labels[int(i)] for  i in row_idx ]
+        col_header = [ "RUN_%d" % (i+1) for i in range(len(rtimelist))] 
+        pddata = [ (row_labels[i], pd ) for i, pd in enumerate(data)]
+        return pddata, col_header
 
     genome_db_tags = {'fv' : 'Fetch from VCF',
     'cc' : 'Combining Cells', 'fo' : 'Flush Output',
@@ -82,21 +78,22 @@ class TimeResultHandler(object):
     'tr' : 'time in read_all()'}
     gtime_col_header = ['Wall-clock time(s)', 'Cpu time(s)', 'Critical path wall-clock time(s)', 
             'Critical path Cpu time(s)', '#critical path']
+    def __get_genome_result4run(self, gendata4run):
+        row_list = [0.0] * len(self.gtime_col_header)
+        for key, val in gendata4run.items():
+            if key != 'op':
+                row_list[int(key)] = val
+        return self.genome_db_tags[gendata4run['op']], row_list
+                
     def get_genome_results(self, runid, subidStr):
+        ''' subidStr = RUN_1,  RUN_n '''
         self.__get_all_result(runid)
-        subid = int(subidStr.split("_")[0])
+        subid = int(subidStr.split("_")[1]) - 1
+        assert(subid < len(self.__all_results))
         rows = []
-        if subid < len(self.__all_results):
-            for gtimes in self.__all_results[subid]['gtime'] :      # list
-                row_list = [0.0] * len(col_header)
-                for key, val in gtimes.items():
-                    if key != 'op':
-                        row_list[int(key)-1] = val
-                rows.append((genome_db_tags[gtimes['op']], row_list))
-            return rows, self.gtime_col_header
-        else:
-            print("Run with %s not found. ")
-            return None
+        for gtimes in self.__all_results[subid]['gtime'] :      # list
+            rows.append(self.__get_genome_result4run(gtimes))
+        return rows, self.gtime_col_header
 
     def get_pidstats(self, runid):
         self.__get_all_result(runid)
@@ -106,8 +103,38 @@ class TimeResultHandler(object):
     def close(self):
         self.data_handler.close()
 
-    def export2csv(runid=None):
+    def export2csv(self, runid=None):
         my_runid, confgiList = self.data_handler.getRunConfigs(runid) 
         self.__get_all_result(my_runid)
+        labels = []
+        rowlist = []
+        filename = os.path.join(os.getcwd(), "run%s.csv" % runid)
+        csv_fd = open(filename, 'w')
+        for i, row in enumerate(confgiList):
+            aRow = []
+            if i == 0:
+                for k, v in confgiList[i].items():
+                    labels.append(k)
+                    aRow.append(v)
+            else:
+                aRow = [ v for v in confgiList[i].values() ]
+            
+            rtime = self.__all_results[i]['rtime']      # name:val
+            if i == 0:
+                time_labels = [ self.time_row_labels[int(x)] for x in rtime.keys() ]
+                labels.extend(time_labels)
+            tData = [ v for v in rtime.values() ]
+            aRow.extend(tData)
 
-        #TODO: piece them together
+            for gtime in self.__all_results[i]['gtime']:      # list
+                opname, gdata = self.__get_genome_result4run(gtime)
+                if i == 0:
+                    gen_labels = [ "%s_%s" % (opname, hname) for hname in self.gtime_col_header ]
+                    labels.extend(gen_labels)
+                aRow.extend(gdata)
+            if i == 0:
+                csv_fd.write("%s\n" % ",".join(labels) )
+            csv_fd.write("%s\n" % ",".join(aRow))
+            csv_fd.flush()
+        csv_fd.close()
+        return filename
