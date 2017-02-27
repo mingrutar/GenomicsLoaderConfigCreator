@@ -84,4 +84,16 @@ VALUES ("num_cells_per_tile", 'Number', "1000", 'nt', 1);
 INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
 VALUES ("segment_size", 'MB', "10", 'sg', 1);
 INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
-VALUES ("do_ping_pong_buffering", 'Boolean', "true", 'pb', 1);
+VALUES ("do_ping_pong_buffering", 'Boolean', "false", 'pb', 1);
+
+-- for query_config_tag --
+INSERT INTO query_config_tag (name, type, default_value) 
+VALUES ("reference_genome", 'Template', "ref_genome");
+INSERT INTO query_config_tag (name, type, default_value) 
+VALUES ("workspace", "getLoaderWorkSpace()", "column_partitions");
+INSERT INTO query_config_tag (name, type, default_value) 
+VALUES ("array", "getLoaderArrayNames()", 1);
+INSERT INTO query_config_tag (name, type, default_value) 
+VALUES ("scan_full", "Boolean", "true");
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("segment_size", 'MB', "10", 'sg', 1);

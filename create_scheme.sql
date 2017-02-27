@@ -26,6 +26,16 @@ CREATE TABLE IF NOT EXISTS host (
     user_definable INTEGER DEFAULT 0,
     CONSTRAINT name_uniq UNIQUE (name ) ON CONFLICT REPLACE
 );
+--- query config tags, with default_value 
+ CREATE TABLE IF NOT EXISTS query_config_tag (
+    _id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    default_value TEXT NULL,
+    tag_code TEXT NULL,
+    user_definable INTEGER DEFAULT 0,
+    CONSTRAINT name_uniq UNIQUE (name ) ON CONFLICT REPLACE
+);
 CREATE TABLE IF NOT EXISTS template (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
    name Text NOT NULL,
@@ -49,11 +59,14 @@ CREATE TABLE IF NOT EXISTS loader_config_def (
 ----
 CREATE TABLE IF NOT EXISTS run_def (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
-   loader_configs TEXT NOT NULL,
+   loader_configs TEXT,
+   run_loader_id INTEGER DEFAULT -1,
+   target_comand TEXT NOT NULL,
    profiler TEXT DEFAULT 'time',
    profiler_type TEXT DEFAULT 'time',
    creation_ts INTEGER NOT NULL
 );
+
 ----
 --- result and result_type describe the outcome
 --- run_flag: 0x1-use mpirun, 0x2-user_assign_host ...
@@ -74,6 +87,7 @@ CREATE TABLE IF NOT EXISTS run_loader_host (
 CREATE TABLE IF NOT EXISTS time_result (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
    run_id REFERENCES run_loader_host (_id),
+   target_comand TEXT,
    time_result TEXT NOT NULL,
    genome_result TEXT,
    partition_1_size INTEGER DEFAULT 0,

@@ -86,7 +86,7 @@ def assign_host_run(lcdef_list) :
     for i in range(len(lcdef_list)) :
         run_list.append( (my_hostlist[i % host_num], lcdef_list[i])  )
 
-    run_id = data_handler.addRun( "-".join(lcdef_list) )
+    run_id = data_handler.addRun( "-".join(lcdef_list), TARGET_TEST_COMMAND )
     run_config[run_id] = run_list
     return run_id
 
@@ -211,7 +211,8 @@ def launch_run( run_id, use_mpirun=False, dryrun=False) :
             print("launching test at %s" % (runinfo[0]))
             os.system("ssh %s %s %s &" % (runinfo[1], RUN_SCRIPT, jsonfl ))
     print("DONE launch... ")
- 
+
+
 if __name__ == '__main__' :
     load_from_db()
 

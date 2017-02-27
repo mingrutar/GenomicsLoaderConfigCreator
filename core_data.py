@@ -17,7 +17,8 @@ class RunVCFData(object):
         'AllRuns' : 'SELECT _id, loader_configs from run_def;',
 
         'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config, creation_ts) VALUES (\"%s\", \"%s\", %d);",
-        'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, creation_ts) VALUES (\"%s\", %d);',
+        'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, target_comand, creation_ts) VALUES (\"%s\", \"%s\", %d);',
+        'INSERT_QUERY_RUN_DEF' : 'INSERT INTO run_def (run_loader_id, target_comand, creation_ts) VALUES (%d, \"%s\", %d);',
 
         'Run_Config' : 'SELECT loader_configs, _id FROM run_def where _id=%d;',
         'Last_Run_Config' : 'SELECT loader_configs, _id FROM run_def ORDER BY _id desc LIMIT 1;',
@@ -48,7 +49,7 @@ class RunVCFData(object):
 
             return None, None
 
-    def getRunConfigNames(self, runid, cursor=None):
+    def getRunConfigNames(self, runid=None, cursor=None):
         ''' return the loader config list for a run, last run if runid is None  '''
         query = self.queries['Run_Config'] % runid if runid else self.queries['Last_Run_Config']
         mycursor = cursor if cursor else self.db_conn.cursor()
@@ -56,7 +57,7 @@ class RunVCFData(object):
             return int(row[1]), row[0].split('-')
         mycursor.close()
         return None
-
+    
     def getAllResult(self, runid):
         assert runid
         mycursor =  self.db_conn.cursor()
@@ -173,9 +174,17 @@ class RunVCFData(object):
         mycursor.close()
         return loader_id
 
-    def addRun(self, configs ):
+    def addRun(self, configs, cmd ):
         mycursor = self.db_conn.cursor()
-        stmt = self.queries['INSERT_RUN_DEF'] % (configs, int(time.time()) )
+        stmt = self.queries['INSERT_RUN_DEF'] % (configs, cmd, int(time.time()) )
+        mycursor.execute(stmt)
+        run_id = mycursor.lastrowid
+        self.db_conn.commit()
+        return run_id
+
+    def addQueryRun(self, run_id, cmd):
+        mycursor = self.db_conn.cursor()
+        stmt = self.queries['INSERT_QUERY_RUN_DEF'] % (run_id, cmd, int(time.time()) )
         mycursor.execute(stmt)
         run_id = mycursor.lastrowid
         self.db_conn.commit()
