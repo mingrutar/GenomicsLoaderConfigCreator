@@ -13,7 +13,7 @@ import core_data
 
 one_KB = 1024
 one_MB = 1048576
-TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
+TILE_WORKSPACE_ROOT = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
 TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb"
 MPIRUN = "/opt/openmpi/bin/mpirun"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
@@ -106,6 +106,7 @@ def __str2num(x) :
         except ValueError:
             return None
 
+tile_workspace = ""
 def make_col_partition(bin_num):
     bin_num = int(bin_num)
     partitions = []       
@@ -114,7 +115,7 @@ def make_col_partition(bin_num):
     if not histogram_fn:
         # TODO: run histogram utility to generate ?
         print("WARN: no histogram file. 1 partition only")      
-        partitions.append({"array" :"TEST0", "begin" : 0, "workspace" : TILE_WORKSPACE })
+        partitions.append({"array" :"TEST0", "begin" : 0, "workspace" : tile_workspace })
     else:    
         with open(histogram_fn, 'r') as rfd:
             context = rfd.readlines()
@@ -130,12 +131,12 @@ def make_col_partition(bin_num):
             subtotal += item[2]
             if (parnum < bin_num-1) and (subtotal > bin_size) :
                 partitions.append({"array" :"TEST%d" % parnum,
-                    "begin" : begin, "workspace" : TILE_WORKSPACE })
+                    "begin" : begin, "workspace" : tile_workspace })
                 parnum += 1
                 subtotal = 0
         if (subtotal > 0) :
             partitions.append({"array" :"TEST%d" % parnum,
-                "begin" : begin, "workspace" : TILE_WORKSPACE })
+                "begin" : begin, "workspace" : tile_workspace })
     return partitions
 
 transformer = {'String' : lambda x : x if isinstance(x, str) else None,
@@ -160,6 +161,11 @@ def __genLoadConfig( lc_items ) :
     ''' return json load file '''
     load_conf = {}
     mpirun_num = 1
+    # tile db ws is tiledb-ws_ts
+    global tile_worlspace
+    timestamp = datetime.now().strftime("%y%m%d%H%M")
+    tile_workspace = "%s_%/" % (TILE_WORKSPACE_ROOT, timestamp)
+
     # val from db tale
     for key, val in loader_tags.items() :
         load_conf[key] = __getValue(val[1], val[2])
@@ -174,7 +180,7 @@ def __genLoadConfig( lc_items ) :
                 mpirun_num = int(lc_items[key])
         else :                      # use default
             load_conf [key] = __getValue( val[1], val[2])
-    return load_conf, mpirun_num 
+    return load_conf, mpirun_num, tile_workspace
  
 def __prepare_run (run_id, target_cmd, user_mpirun) :
     timestamp = datetime.now().strftime("%y%m%d%H%M")
@@ -183,7 +189,7 @@ def __prepare_run (run_id, target_cmd, user_mpirun) :
     ret = []
     for host, lc_id in run_config[run_id] :
         if lc_id in user_loader_conf_def:
-            load_config, num_parallel = __genLoadConfig(user_loader_conf_def[lc_id]) 
+            load_config, num_parallel, tile_workspace = __genLoadConfig(user_loader_conf_def[lc_id]) 
             jsonfn = os.path.join(run_dir, host+".json")
             with open(jsonfn, 'w') as ofd :
                 json.dump(load_config, ofd)
@@ -191,7 +197,7 @@ def __prepare_run (run_id, target_cmd, user_mpirun) :
             mpirun_num = user_mpirun[lc_id] if user_mpirun and lc_id in user_mpirun else num_parallel    
             theCommand = "%s -np %d %s %s" % (MPIRUN, mpirun_num, target_cmd, jsonfn)  \
                 if mpirun_num > 1 else "%s %s" % (target_cmd, jsonfn)
-            ret.append((theCommand, host, jsonfn) )   
+            ret.append((theCommand, host, tile_workspace) )   
     return (run_id, ret)
 
 def launch_run( run_id, dryrun, user_mpirun=None) :
@@ -205,6 +211,7 @@ def launch_run( run_id, dryrun, user_mpirun=None) :
     for runinfo in launch_info :
         exec_json = dict({ 'run_id' : run_id })
         exec_json['cmd'] = runinfo[0]
+        exec_json['tile_ws'] = runinfo[2]
         jsonfl = os.path.join(ws_path, runinfo[1])
         with open(jsonfl, 'w') as ofd :
             json.dump(exec_json, ofd)

@@ -146,28 +146,29 @@ def pidstat2cvs(ifile, of_prefix) :
 if __name__ == '__main__' :
     jsonfl_path = sys.argv[1]
     with open(jsonfl_path, 'r') as ldf:
-        exec_json = json.load(ldf)
+        exec_list = json.load(ldf)
     working_dir = os.path.dirname( os.path.dirname(jsonfl_path))
     print("INFO %s: working_dir=%s" % (hostname, working_dir))
-    rc = run_pre_test( working_dir, TILE_WORKSPACE)
-    if rc:
-      target_cmd = [ str(x.rstrip()) for x in  exec_json['cmd'].split(' ') ]
-      # print('target_cmd=%s' % target_cmd)
-      log_fn = "%d-%s_%s_pid.log" % (exec_json['run_id'], datetime.now().strftime("%y%m%d%H%M"), os.path.basename(jsonfl_path)[-4:])
-      log2path = os.path.join(os.path.dirname(jsonfl_path), log_fn)
-      print("INFO %s: pidstat.log=%s" % (hostname, log2path))
-      time_nval,genome_time = measure_more(target_cmd, log2path)
+    for exec_json in exec_list:
+      rc = run_pre_test( working_dir, exec_json["tile_ws"])
+      if rc:
+        target_cmd = [ str(x.rstrip()) for x in  exec_json['cmd'].split(' ') ]
+        # print('target_cmd=%s' % target_cmd)
+        log_fn = "%d-%s_%s_pid.log" % (exec_json['run_id'], datetime.now().strftime("%y%m%d%H%M"), os.path.basename(jsonfl_path)[-4:])
+        log2path = os.path.join(os.path.dirname(jsonfl_path), log_fn)
+        print("INFO %s: pidstat.log=%s" % (hostname, log2path))
+        time_nval,genome_time = measure_more(target_cmd, log2path)
 
-      stat_path = os.path.join(working_dir, 'stats')
-      if not os.path.isdir(stat_path) :
-        os.mkdir(stat_path)
-      cvs_prefix = os.path.join(stat_path, log_fn[:-4])
-      cvsfiles = pidstat2cvs(log2path, cvs_prefix)
-#      print("INFO %s: cvsfiles= %s" % (hostname, str(cvsfiles) ))
-      cvsfile = [ os.path.basename(x) for x in cvsfiles ]
-      db_path = os.path.join(working_dir, 'genomicsdb_loader.db')
-      if os.path.isfile(db_path) :
-        cmd = os.path.basename(exec_json['cmd'])
-        save_time_log(db_path, exec_json['run_id'], cmd, time_nval, genome_time, cvsfiles)
-      else :
-        print("INFO %s: not found %s" % (hostname, db_path))
+        stat_path = os.path.join(working_dir, 'stats')
+        if not os.path.isdir(stat_path) :
+          os.mkdir(stat_path)
+        cvs_prefix = os.path.join(stat_path, log_fn[:-4])
+        cvsfiles = pidstat2cvs(log2path, cvs_prefix)
+  #      print("INFO %s: cvsfiles= %s" % (hostname, str(cvsfiles) ))
+        cvsfile = [ os.path.basename(x) for x in cvsfiles ]
+        db_path = os.path.join(working_dir, 'genomicsdb_loader.db')
+        if os.path.isfile(db_path) :
+          cmd = os.path.basename(exec_json['cmd'])
+          save_time_log(db_path, exec_json['run_id'], cmd, time_nval, genome_time, cvsfiles)
+        else :
+          print("INFO %s: not found %s" % (hostname, db_path))
