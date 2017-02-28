@@ -2,6 +2,8 @@
 import sys
 import os, re
 import os.path
+import getopt
+import platform
 import json
 import uuid
 from datetime import datetime
@@ -154,7 +156,7 @@ def __getValue(itemType, itemVal) :
 
 #SELECT name, type, default_value FROM loader_config_tag
 # user only define the value
-def __genLoadConfig( lc_items, use_mpirun ) :
+def __genLoadConfig( lc_items ) :
     ''' return json load file '''
     load_conf = {}
     mpirun_num = 1
@@ -168,32 +170,34 @@ def __genLoadConfig( lc_items, use_mpirun ) :
                 load_conf [key] = __getValue( uval[1], uval[0])
             else :
                 load_conf [key] = __getValue( val[1], uval)
-            if key == "column_partitions" and use_mpirun :
+            if key == "column_partitions" :
                 mpirun_num = int(lc_items[key])
         else :                      # use default
             load_conf [key] = __getValue( val[1], val[2])
     return load_conf, mpirun_num 
  
-def __prepare_run (run_id, target_cmd, use_mpirun) :
+def __prepare_run (run_id, target_cmd, user_mpirun) :
     timestamp = datetime.now().strftime("%y%m%d%H%M")
     run_dir = os.path.join(working_dir, 'run_%s'%timestamp)
     __make_path(run_dir)
     ret = []
     for host, lc_id in run_config[run_id] :
         if lc_id in user_loader_conf_def:
-            load_config, mpirun_num = __genLoadConfig(user_loader_conf_def[lc_id], use_mpirun) 
+            load_config, num_parallel = __genLoadConfig(user_loader_conf_def[lc_id]) 
             jsonfn = os.path.join(run_dir, host+".json")
             with open(jsonfn, 'w') as ofd :
                 json.dump(load_config, ofd)
+            #use user defined, if user skipped, use full
+            mpirun_num = user_mpirun[lc_id] if user_mpirun and lc_id in user_mpirun else num_parallel    
             theCommand = "%s -np %d %s %s" % (MPIRUN, mpirun_num, target_cmd, jsonfn)  \
                 if mpirun_num > 1 else "%s %s" % (target_cmd, jsonfn)
             ret.append((theCommand, host, jsonfn) )   
     return (run_id, ret)
 
-def launch_run( run_id, use_mpirun=False, dryrun=False) :
+def launch_run( run_id, dryrun, user_mpirun=None) :
     ''' assign host to loader_config. 
     1) not support run on multi hosts, 2) allow user assign host '''
-    run_id, launch_info = __prepare_run(run_id, TARGET_TEST_COMMAND, use_mpirun)
+    run_id, launch_info = __prepare_run(run_id, TARGET_TEST_COMMAND, user_mpirun)
     #TODO: check software readiness @ all hosts
     print("START run %s loaders @ %s" % (run_id, datetime.now()))
     ws_path = os.path.join(working_dir, 'run_ws')
@@ -212,17 +216,42 @@ def launch_run( run_id, use_mpirun=False, dryrun=False) :
             os.system("ssh %s %s %s &" % (runinfo[1], RUN_SCRIPT, jsonfl ))
     print("DONE launch... ")
 
+def getRunSettings(args):
+    myopts, parsed_args = getopt.getopt(args,"l:r:d")
+    dryrun = platform.system() == 'Windows'
+    loader_config =  "loader_def.json"
+    parallel_config = None
+    # check args
+    for opt, input in myopts:
+        if opt == '-l':
+            loader_config = os.path.join(working_dir, input)
+        if opt == '-r':
+            parallel_config = os.path.join(working_dir, input)
+        if opt == '--dryrun' or opt == '-d':
+            dryrun = input.lower() in ['1', 'true'] 
 
+    if not os.path.exists(loader_config):
+        print("ERROR: cannot find load config file %s, exit..." % loader_config)
+        exit(1)
+    if parallel_config and not os.path.exists(parallel_config):
+        print("WARN: cannot find mpirun config file %s, will not use mpirun  ..." % parallel_config)
+        parallel_config = None
+    return loader_config, parallel_config, dryrun
+    
 if __name__ == '__main__' :
+    loader_config, parallel_config, dryrun = getRunSettings(sys.argv[1:])
     load_from_db()
-
-    loader_config = sys.argv[1] if(len(sys.argv) > 1) else "loader_def.json"
     ifl = os.path.join(os.getcwd(), loader_config)
     with open(loader_config, 'r') as ldf:
         loader_def_list = json.load(ldf)
 
     cfg_items = addUserConfigs(loader_def_list)
-
     if (cfg_items) :
         run_id = assign_host_run(cfg_items)
-        launch_run(run_id, dryrun=True)
+        if parallel_config:
+            with open(parallel_config, 'r') as ldf:
+                mpiruncfg = json.load(ldf)
+            parallel_num = {cfg_items[int(idx)] : num_proc for idx, num_proc in mpiruncfg.items() }
+            launch_run(run_id, dryrun, parallel_num)
+        else: 
+            launch_run(run_id, dryrun)

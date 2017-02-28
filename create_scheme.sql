@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS run_def (
    loader_configs TEXT,
    run_loader_id INTEGER DEFAULT -1,
    target_comand TEXT NOT NULL,
+   num_proc INTEGER DEFAULT 1,
    profiler TEXT DEFAULT 'time',
    profiler_type TEXT DEFAULT 'time',
    creation_ts INTEGER NOT NULL
