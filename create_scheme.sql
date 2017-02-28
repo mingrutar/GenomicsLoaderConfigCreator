@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS run_log (
    profiler TEXT DEFAULT 'time',
    profiler_type TEXT DEFAULT 'time',
    creation_ts INTEGER NOT NULL
-};
+);
 
 --- for analysis, add partition 1 and total size for convenience
 CREATE TABLE IF NOT EXISTS time_result (

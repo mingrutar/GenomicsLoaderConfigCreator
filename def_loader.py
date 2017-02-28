@@ -216,7 +216,7 @@ def launch_run( run_def_id, dryrun, user_mpirun=None) :
     for host, runCmdList in launch_info.items():
         exec_list = []
         for runCmd in runCmdList:
-            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[2]):
+            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[2])
             #TODO make ru_exec pick from db
             exec_json = dict({ 'run_id' : run_id })
             exec_json['cmd'] = runCmd[0]
