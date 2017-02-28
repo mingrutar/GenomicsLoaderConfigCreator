@@ -56,33 +56,28 @@ CREATE TABLE IF NOT EXISTS loader_config_def (
 ----
 -- define a run, status = run through, canceled, ..?
 -- currently only profile with time
+-- run_loader_id used by query only; 
+-- loader_configs used by loader only
 ----
 CREATE TABLE IF NOT EXISTS run_def (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
+   target_comand TEXT NOT NULL,
    loader_configs TEXT,
    run_loader_id INTEGER DEFAULT -1,
-   target_comand TEXT NOT NULL,
-   num_proc INTEGER DEFAULT 1,
-   profiler TEXT DEFAULT 'time',
-   profiler_type TEXT DEFAULT 'time',
    creation_ts INTEGER NOT NULL
 );
 
-----
---- result and result_type describe the outcome
---- run_flag: 0x1-use mpirun, 0x2-user_assign_host ...
----
-CREATE TABLE IF NOT EXISTS run_loader_host (
+CREATE TABLE IF NOT EXISTS run_log (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
    run_def_id REFERENCES run_def(_id),
-   run_flag INTEGER DEFAULT 0,
-   loader_on_host TEXT NOT NULL, 
-   start_time INTEGER NOT NULL,
-   end_time INTEGER NOT NULL,
-   status INTEGER NOT NULL,
-   result TEXT NULL, 
-   result_type TEXT NULL 
-);
+   num_parallel INTEGER DEFAULT 1,
+   full_cmd TEXT NOT NULL,
+   tiledb_ws TEXT NOT NULL,
+   host_id REFERENCES host(_id),
+   profiler TEXT DEFAULT 'time',
+   profiler_type TEXT DEFAULT 'time',
+   creation_ts INTEGER NOT NULL
+};
 
 --- for analysis, add partition 1 and total size for convenience
 CREATE TABLE IF NOT EXISTS time_result (

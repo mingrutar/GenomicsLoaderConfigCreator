@@ -18,6 +18,7 @@ class RunVCFData(object):
 
         'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config, creation_ts) VALUES (\"%s\", \"%s\", %d);",
         'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, target_comand, creation_ts) VALUES (\"%s\", \"%s\", %d);',
+        'INSERT_RUN_LOG' : 'INSERT INTO run_log (run_def_id, num_parallel, full_cmd, tiledb_ws, host_id, creation_ts) VALUES (\d,\d,%s,%s,%s, %d);',
         'INSERT_QUERY_RUN_DEF' : 'INSERT INTO run_def (run_loader_id, target_comand, creation_ts) VALUES (%d, \"%s\", %d);',
 
         'Run_Config' : 'SELECT loader_configs, _id FROM run_def where _id=%d;',
@@ -174,7 +175,7 @@ class RunVCFData(object):
         mycursor.close()
         return loader_id
 
-    def addRun(self, configs, cmd ):
+    def addRunConfig(self, configs, cmd ):
         mycursor = self.db_conn.cursor()
         stmt = self.queries['INSERT_RUN_DEF'] % (configs, cmd, int(time.time()) )
         mycursor.execute(stmt)
@@ -182,6 +183,14 @@ class RunVCFData(object):
         self.db_conn.commit()
         return run_id
 
+    def addRunLog(self, runConfig, host, cmd, tiledb_ws, num_parallel=1):
+        mycursor = self.db_conn.cursor()
+        stmt = self.queries['INSERT_RUN_LOG'] % (runConfig,num_parallel cmd,tiledb_ws,host, int(time.time()) )
+        mycursor.execute(stmt)
+        run_id = mycursor.lastrowid
+        self.db_conn.commit()
+        return run_id  
+              
     def addQueryRun(self, run_id, cmd):
         mycursor = self.db_conn.cursor()
         stmt = self.queries['INSERT_QUERY_RUN_DEF'] % (run_id, cmd, int(time.time()) )

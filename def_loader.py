@@ -83,13 +83,15 @@ def addUserConfigs(user_defined) :
         return None
 
 def assign_host_run(lcdef_list) :
-    host_num = len(my_hostlist)
-    run_list = []
-    for i in range(len(lcdef_list)) :
-        run_list.append( (my_hostlist[i % host_num], lcdef_list[i])  )
-
-    run_id = data_handler.addRun( "-".join(lcdef_list), TARGET_TEST_COMMAND )
-    run_config[run_id] = run_list
+    global run_config
+    runsonHost = {}
+    for i, lc in enumerate(lcdef_list):
+        if my_hostlist[i] in runsonHost:
+            runonHost[my_hostlist[i]] = [lc]  
+        else:
+            runonHost[my_hostlist[i]].append(lc)
+    run_id = data_handler.addRunConfig( "-".join(lcdef_list), TARGET_TEST_COMMAND )
+    run_config[run_id] = runsonHost
     return run_id
 
 def __make_path(target_path) :
@@ -186,35 +188,43 @@ def __prepare_run (run_id, target_cmd, user_mpirun) :
     timestamp = datetime.now().strftime("%y%m%d%H%M")
     run_dir = os.path.join(working_dir, 'run_%s'%timestamp)
     __make_path(run_dir)
-    ret = []
-    for host, lc_id in run_config[run_id] :
-        if lc_id in user_loader_conf_def:
-            load_config, num_parallel, tile_workspace = __genLoadConfig(user_loader_conf_def[lc_id]) 
-            jsonfn = os.path.join(run_dir, host+".json")
-            with open(jsonfn, 'w') as ofd :
-                json.dump(load_config, ofd)
-            #use user defined, if user skipped, use full
-            mpirun_num = user_mpirun[lc_id] if user_mpirun and lc_id in user_mpirun else num_parallel    
-            theCommand = "%s -np %d %s %s" % (MPIRUN, mpirun_num, target_cmd, jsonfn)  \
-                if mpirun_num > 1 else "%s %s" % (target_cmd, jsonfn)
-            ret.append((theCommand, host, tile_workspace) )   
-    return (run_id, ret)
+    ret = {}
+    for host, lc_list in run_config[run_id].items :
+        commandList =[]
+        for lc_id in lc_list:
+            if lc_id in user_loader_conf_def:
+                load_config, num_parallel, tile_workspace = __genLoadConfig(user_loader_conf_def[lc_id]) 
+                jsonfn = os.path.join(run_dir, host+".json")
+                with open(jsonfn, 'w') as ofd :
+                    json.dump(load_config, ofd)
+                #use user defined, if user skipped, use full
+                mpirun_num = user_mpirun[lc_id] if user_mpirun and lc_id in user_mpirun else num_parallel    
+                theCommand = "%s -np %d %s %s" % (MPIRUN, mpirun_num, target_cmd, jsonfn)  \
+                    if mpirun_num > 1 else "%s %s" % (target_cmd, jsonfn)
+                commandList.apend(theCommand, tile_workspace, mpirun_num)
+            ret[host] = commandList   
+    return ret
 
-def launch_run( run_id, dryrun, user_mpirun=None) :
+def launch_run( run_def_id, dryrun, user_mpirun=None) :
     ''' assign host to loader_config. 
-    1) not support run on multi hosts, 2) allow user assign host '''
-    run_id, launch_info = __prepare_run(run_id, TARGET_TEST_COMMAND, user_mpirun)
+    TODO: allow user assign host '''
+    launch_info = __prepare_run(run_def_id, TARGET_TEST_COMMAND, user_mpirun)
     #TODO: check software readiness @ all hosts
     print("START run %s loaders @ %s" % (run_id, datetime.now()))
     ws_path = os.path.join(working_dir, 'run_ws')
     __make_path(ws_path)
-    for runinfo in launch_info :
-        exec_json = dict({ 'run_id' : run_id })
-        exec_json['cmd'] = runinfo[0]
-        exec_json['tile_ws'] = runinfo[2]
-        jsonfl = os.path.join(ws_path, runinfo[1])
+    for host, runCmdList in launch_info.items():
+        exec_list = []
+        for runCmd in runCmdList:
+            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[2]):
+            #TODO make ru_exec pick from db
+            exec_json = dict({ 'run_id' : run_id })
+            exec_json['cmd'] = runCmd[0]
+            exec_json['tile_ws'] = runCmd[1]
+            exec_list.append(exec_json)
+        jsonfl = os.path.join(ws_path, host)
         with open(jsonfl, 'w') as ofd :
-            json.dump(exec_json, ofd)
+            json.dump(exec_list, ofd)
         if dryrun :
             shell_cmd = "ssh %s python %s %s &" % (runinfo[1], RUN_SCRIPT, jsonfl )
             print('DRYRUN: os.system(%s)' % shell_cmd )
