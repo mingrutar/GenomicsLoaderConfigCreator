@@ -33,6 +33,7 @@ run_config = {}                 # { uuid : [ (host, lcdef) ] }
 data_handler = core_data.RunVCFData()
 histogram_fn = None
 working_dir = os.environ.get('WS_HOME', os.getcwd())
+tile_workspace = ""
 
 def load_from_db() :
     global my_hostlist, my_templates, loader_tags, overridable_tags, defined_loaders, defined_runs
@@ -107,8 +108,9 @@ def __str2num(x) :
         except ValueError:
             return None
 
-tile_workspace = ""
 def make_col_partition(bin_num):
+    global tile_workspace
+    print("tile_workspace=%s" % tile_workspace)
     bin_num = int(bin_num)
     partitions = []       
 
@@ -163,7 +165,7 @@ def __genLoadConfig( lc_items ) :
     load_conf = {}
     mpirun_num = 1
     # tile db ws is tiledb-ws_ts
-    global tile_worlspace
+    global tile_workspace
     timestamp = datetime.now().strftime("%y%m%d%H%M")
     tile_workspace = "%s_%s/" % (TILE_WORKSPACE_ROOT, timestamp)
 
