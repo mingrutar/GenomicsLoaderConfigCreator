@@ -221,20 +221,12 @@ def launch_run( run_def_id, dryrun, user_mpirun=None) :
         exec_list = []
         for runCmd in runCmdList:
             run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[2])
-            #TODO make ru_exec pick from db
-            exec_json = dict({ 'run_id' : run_id })
-            exec_json['cmd'] = runCmd[0]
-            exec_json['tile_ws'] = runCmd[1]
-            exec_list.append(exec_json)
-        jsonfl = os.path.join(ws_path, host)
-        with open(jsonfl, 'w') as ofd :
-            json.dump(exec_list, ofd)
         if dryrun :
-            shell_cmd = "ssh %s python %s %s &" % (host, RUN_SCRIPT, jsonfl )
+            shell_cmd = "ssh %s python %d &" % (host, run_def_id )
             print('DRYRUN: os.system(%s)' % shell_cmd )
         else :
             print("launching test at %s" % (host))
-            os.system("ssh %s %s %s &" % (host, RUN_SCRIPT, jsonfl ))
+            os.system("ssh %s %s %d &" % (host, RUN_SCRIPT, run_def_id ))
     print("DONE launch... ")
 
 def getRunSettings(args):
