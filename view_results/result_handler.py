@@ -26,6 +26,7 @@ class TimeResultHandler(object):
             if hasattr(self, 'data_handler') and self.data_handler:
                 self.data_handler.close() 
             self.data_handler = core_data.RunVCFData(dbpath) 
+            print("INFO found genomicd loader db at %s" % dbpath )
 
     def __transform4Pandas(self, inputRows) :
         ''' inputRows = [ ]
