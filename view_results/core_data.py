@@ -54,10 +54,13 @@ class RunVCFData(object):
         ''' return the loader config list for a run, last run if runid is None  '''
         query = self.queries['Run_Config'] % runid if runid else self.queries['Last_Run_Config']
         mycursor = cursor if cursor else self.db_conn.cursor()
+        ret = None
         for row in mycursor.execute(query):
-            return int(row[1]), row[0].split('-')
+            myrunid = int(row[1])
+            lconfigs = [ cl for cl in row[0].split('-') ] 
+            ret = (myrunid, lconfigs)
         mycursor.close()
-        return None
+        return ret
     
     def getAllResult(self, runid):
         assert runid

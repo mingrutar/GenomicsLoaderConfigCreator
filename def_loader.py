@@ -199,7 +199,10 @@ def __prepare_run (run_id, target_cmd, user_mpirun) :
                 with open(jsonfn, 'w') as ofd :
                     json.dump(load_config, ofd)
                 #use user defined, if user skipped, use full
-                mpirun_num = user_mpirun[lc_id] if user_mpirun and lc_id in user_mpirun else num_parallel    
+                if user_mpirun:
+                    mpirun_num = user_mpirun[lc_id] if user_mpirun and lc_id in user_mpirun else num_parallel
+                else:
+                    mpirun_num = 1    
                 theCommand = "%s -np %d %s %s" % (MPIRUN, mpirun_num, target_cmd, jsonfn)  \
                     if mpirun_num > 1 else "%s %s" % (target_cmd, jsonfn)
                 commandList.append((theCommand, tile_workspace, mpirun_num))

@@ -98,9 +98,9 @@ def measure_more( cmd, logfile ) :
     print("ERROR @{}: failed exec. cmd={}".format(hostname, theExecCmd) )
 
 INSERT_TIME ="INSERT INTO time_result (run_id, target_comand, time_result, genome_result, partition_1_size, db_size, pidstat_path) \
- VALUES (%s, %s, \"%s\", \"%s\", %s, %s, \"%s\");"
-def save_time_log(db_path, run_id, cmd, time_output, genome_output, pidstat_cvs) :
-    db_size = commands.getoutput('du -sh %s' % TILE_WORKSPACE ).split()[0]  
+ VALUES (%s, \"%s\", \"%s\", \"%s\", %s, \"%s\", \"%s\");"
+def save_time_log(db_path, run_id, cmd, time_output, genome_output, pidstat_cvs, tiledb_ws) :
+    db_size = check_output(['du', '-sh', tiledb_ws]).decode('utf-8').split()[0]
     stmt = INSERT_TIME % (run_id, cmd, str(time_output), str(genome_output), 0, db_size, pidstat_cvs)
     print(stmt)
     db_conn = sqlite3.connect(db_path)
@@ -169,6 +169,6 @@ if __name__ == '__main__' :
         db_path = os.path.join(working_dir, 'genomicsdb_loader.db')
         if os.path.isfile(db_path) :
           cmd = os.path.basename(exec_json['cmd'])
-          save_time_log(db_path, exec_json['run_id'], cmd, time_nval, genome_time, cvsfiles)
+          save_time_log(db_path, exec_json['run_id'], cmd, time_nval, genome_time, cvsfiles, exec_json["tile_ws"])
         else :
           print("INFO %s: not found %s" % (hostname, db_path))
