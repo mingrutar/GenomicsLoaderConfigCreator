@@ -64,7 +64,7 @@ def loader_name(config) :
     for x in as_defaults:
         del config[x]
     return ''.join(name)
-
+'''
 def addUserConfigs(user_defined) :
     if isinstance(user_defined, list) :
         ret_val = []
@@ -82,14 +82,16 @@ def addUserConfigs(user_defined) :
     else :
         print("WARN add requies a list object") 
         return None
-
+'''
 def assign_host_run(lcdef_list) :
     global run_config
     runsonHost = {}
+    num_host = len(my_hostlist)
     for i, lc in enumerate(lcdef_list):
-        if my_hostlist[i] not in runsonHost:
-            runsonHost[my_hostlist[i]] = []
-        runsonHost[my_hostlist[i]].append(lc)
+        if i < num_host:
+            runsonHost[my_hostlist[i]] = [lc] 
+        else:
+            runsonHost[my_hostlist[i % num_host]].append(lc)
     run_id = data_handler.addRunConfig( "-".join(lcdef_list), TARGET_TEST_COMMAND )
     run_config[run_id] = runsonHost
     return run_id
@@ -258,7 +260,8 @@ if __name__ == '__main__' :
     with open(loader_config, 'r') as ldf:
         loader_def_list = json.load(ldf)
 
-    cfg_items = addUserConfigs(loader_def_list)
+    cfg_items = data_handler.addUserConfigs(loader_def_list)
+
     if (cfg_items) :
         run_id = assign_host_run(cfg_items)
         if parallel_config:
@@ -268,3 +271,4 @@ if __name__ == '__main__' :
             launch_run(run_id, dryrun, parallel_num)
         else: 
             launch_run(run_id, dryrun)
+    data_handler.close()

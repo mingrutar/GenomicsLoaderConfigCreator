@@ -8,15 +8,24 @@
 import sqlite3
 import numpy as np
 import pandas as pd
-import core_data
 import os, os.path
+import sys
 
 class TimeResultHandler(object):
-    def __init__(self, result_folder=None):
-        self.__wspace = result_folder if result_folder else os.getcwd()
-        dbpath = os.path.join(self.__wspace, core_data.RunVCFData.DefaultDBName)
-        self.data_handler = core_data.RunVCFData()
+    def __init__(self, wkspace=None ):
+        self.__wspace = wkspace if wkspace else os.getcwd()
         self.__runid = None
+        self.setResultPath(".")
+    
+    def setResultPath(self, result_path):
+        self.__source = os.path.join(self.__wspace, result_path)
+        sys.path.append(os.path.dirname(self.__wspace))
+        import core_data
+        dbpath = os.path.join(self.__source, core_data.RunVCFData.DefaultDBName)
+        if os.path.isfile(dbpath):
+            if hasattr(self, 'data_handler') and self.data_handler:
+                self.data_handler.close() 
+            self.data_handler = core_data.RunVCFData(dbpath) 
 
     def __transform4Pandas(self, inputRows) :
         ''' inputRows = [ ]
@@ -31,16 +40,15 @@ class TimeResultHandler(object):
         return row_labels, data
     
     def getRunSetting(self, runid=None):
-        my_runid, confgiList = self.data_handler.getRunConfigs(runid)
-        return confgiList
+        return self.data_handler.getRunConfigs(runid)
         
     def getRunSetting4Pandas(self, runid=None):
-        ''' runid = -1 means the last run, output TEST_x as column'''
+        ''' runid = -1 means the last run, output LOAD_x as column'''
         # confgiList [{,}] config_tag with user value or -
         my_runid, confgiList = self.data_handler.getRunConfigs(runid) 
         if confgiList:
             row_labels, data = self.__transform4Pandas(confgiList)
-            col_header = [ "TEST_%d" % (i+1) for i in range(len(confgiList))]
+            col_header = [ "LOAD_%d" % (i+1) for i in range(len(confgiList))]
             pddata = [ (row_labels[i], dr) for i, dr in enumerate( data) ]
             return my_runid, pddata, col_header
         else:
@@ -70,7 +78,7 @@ class TimeResultHandler(object):
             rtimelist.append(row['rtime'])
         row_idx, data = self.__transform4Pandas(rtimelist)
         row_labels = [ self.time_row_labels[int(i)] for  i in row_idx ]
-        col_header = [ "TEST_%d" % (i+1) for i in range(len(rtimelist))] 
+        col_header = [ "LOAD_%d" % (i+1) for i in range(len(rtimelist))] 
         pddata = [ (row_labels[i], pd ) for i, pd in enumerate(data)]
         return pddata, col_header
 
@@ -88,7 +96,7 @@ class TimeResultHandler(object):
         return self.genome_db_tags[gendata4run['op']], row_list
                 
     def get_genome_results(self, runid, subidStr):
-        ''' subidStr = TEST_1,  TEST_n '''
+        ''' subidStr = LOAD_1,  LOAD_n '''
         self.__get_all_result(runid)
         subid = int(subidStr.split("_")[1]) - 1
         assert(subid < len(self.__all_results))
@@ -99,18 +107,22 @@ class TimeResultHandler(object):
 
     def get_pidstats(self, runid):
         self.__get_all_result(runid)
-        #TODO? read all cvs files in?
-        return [ r['pidstat'] for r in self.__all_results ]
+        pidstas = []
+        for pidrow in self.__all_results:
+            pidstas.append([ os.path.join(self.__source, 'stats', os.path.basename(fp)) for fp in pidrow['pidstat']])
+#        pidstas = [ map(lambda fp: os.path.join(self.__source, 'stats', os.path.basename(fp)), pidrow['pidstat']) for pidrow in self.__all_results ]
+        return pidstas
     
     def close(self):
         self.data_handler.close()
 
     def export2csv(self, runid=None):
         my_runid, confgiList = self.data_handler.getRunConfigs(runid) 
+        print("INFO export test run %d to csv..." % my_runid)
         self.__get_all_result(my_runid)
         labels = []
         rowlist = []
-        filename = os.path.join(os.getcwd(), "run%s.csv" % runid)
+        filename = os.path.join(self.__wspace, "csvfiles", "run_%s.csv" % my_runid)
         csv_fd = open(filename, 'w')
         for i, row in enumerate(confgiList):
             aRow = []
@@ -142,14 +154,20 @@ class TimeResultHandler(object):
         return filename
 
 if __name__ == '__main__':
-    resultData = TimeResultHandler()
-    confgiList = resultData.getRunSetting()
+    mypath = os.path.dirname(sys.argv[0])
+    print("mypath=%s" % mypath)
+
+    resultData = TimeResultHandler(mypath)
+    
+    resultData.setResultPath("run_6")
+
+    runid, confgiList = resultData.getRunSetting()
 
     runid, data, col = resultData.getRunSetting4Pandas()
     # test time
     time_data, col_header = resultData.get_time_result(runid)
     #test genomics data
-    gen_data, col_header = resultData.get_genome_results(runid, 'TEST_1')
+    gen_data, col_header = resultData.get_genome_results(runid, 'LOAD_1')
 
     pidfiles = resultData.get_pidstats(runid)
     for pids in pidfiles:                       # each machine

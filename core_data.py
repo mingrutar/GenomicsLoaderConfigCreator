@@ -57,7 +57,8 @@ class RunVCFData(object):
         ret = None
         for row in mycursor.execute(query):     # only one result
             ret = (row[1], [ lc for lc in row[0].split('-') ])
-        mycursor.close()
+        if not cursor:
+            mycursor.close()
         return ret
     
     def getAllResult(self, runid):
@@ -132,12 +133,13 @@ class RunVCFData(object):
         mycursor.close()
         return templates
 
-    def getUserDefinableConfigTags(self, mycursor):
-        if not mycursor:
-            mycursor = self.db_conn.cursor()
+    def getUserDefinableConfigTags(self, cursor):
+        mycursor = cursor if cursor else self.db_conn.cursor()
         lc_overridable_tags={}
         for row in mycursor.execute(self.queries['LC_OverrideTag']):
             lc_overridable_tags[row[0]] = list(row)
+        if not cursor:
+            mycursor.close()
         return lc_overridable_tags
 
     def getConfigTags(self):

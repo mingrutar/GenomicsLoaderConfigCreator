@@ -1,6 +1,0 @@
-[
-    {"column_partitions" : 16,  "segment_size" : [10, "KB"] },
-    {"column_partitions" : 16, "segment_size" : [100, "KB"] },
-    {"column_partitions" : 16, "segment_size" : 1 },
-    {"column_partitions" : 16, "do_ping_pong_buffering" : false }
-]

@@ -19,7 +19,7 @@ DEVNULL = open(os.devnull, 'wb', 0)
 working_path = os.getcwd()
 g_hostname = platform.node().split('.')[0]
  
-queries = { "SELECT_RUN_CMD" : "SELECT _id, full_cmd, tiledb_ws FROM run_log WHERE host_id like %s AND run_def_id=%s;",
+queries = { "SELECT_RUN_CMD" : "SELECT _id, full_cmd, tiledb_ws FROM run_log WHERE host_id like \"%s\" AND run_def_id=%d;",
    "INSERT_TIME" : "INSERT INTO time_result (run_id, target_comand, time_result, genome_result, partition_1_size, db_size, pidstat_path) \
  VALUES (%s, \"%s\", \"%s\", \"%s\", %s, \"%s\", \"%s\");" } 
 genome_profile_tags = {'fetch from vcf' : 'fv',
@@ -123,13 +123,13 @@ def run_pre_test(working_dir, tiledb_root) :
 
 def get_command(run_id, db_path):
     ret = []
-    stmt = queries['SELECT_RUN_CMD'] % run_id
+    stmt = queries['SELECT_RUN_CMD'] % (g_hostname, run_id)
     print("INFO %s: run_pre_test stmt=%s" %(g_hostname, stmt))
     db_conn = sqlite3.connect(db_path)
     mycursor = db_conn.cursor()
     for row in mycursor.execute(stmt):
-      ret.add((row[1], row[2], row[0]))
-    mycursor.close()
+      ret.append((row[1], row[2], row[0]))
+    db_conn.close()
     return ret
 
 def pidstat2cvs(ifile, of_prefix) :
@@ -156,20 +156,21 @@ def pidstat2cvs(ifile, of_prefix) :
     return cvs_pids
 
 if __name__ == '__main__' :
-    rundef_id = sys.argv[1]
-    working_dir = os.getcwd()
+    rundef_id =int(sys.argv[1])
+    working_dir = os.path.dirname(sys.argv[0])
     db_path = os.path.join(working_dir, 'genomicsdb_loader.db')
     if not os.path.isfile(db_path) :
       print("INFO %s: not found %s, ...exit " % (g_hostname, db_path))
       exit()
 
-    cmd_list = get_command(int(rundef_id), db_path)        # 
+    cmd_list = get_command(rundef_id, db_path)        # 
     for cmd, tiledb_ws, run_id in cmd_list:
       rc = run_pre_test( working_dir, tiledb_ws )
       if rc:
         target_cmd = [ str(x.rstrip()) for x in cmd.split(' ') ]
         # print('target_cmd=%s' % target_cmd)
         log2path = "%d-%d-%s_pid.log" % (rundef_id, run_id, g_hostname)
+        log2path = os.path.join(working_dir, "logs", log2path)
         print("INFO %s: pidstat.log=%s" % (g_hostname, log2path))
         time_nval, genome_time = measure_more(target_cmd, log2path)
 
