@@ -64,11 +64,10 @@ def loader_name(config) :
     for x in as_defaults:
         del config[x]
     return ''.join(name)
-'''
+
 def addUserConfigs(user_defined) :
     if isinstance(user_defined, list) :
         ret_val = []
-        db_conn = None
         for config in user_defined: #  config is dict,
             lcname = loader_name(config)
             if lcname not in defined_loaders:
@@ -76,13 +75,11 @@ def addUserConfigs(user_defined) :
                 defined_loaders[lcname] = (config, loader_id) 
             user_loader_conf_def[lcname] = defined_loaders[lcname][0]
             ret_val.append(lcname)
-        if db_conn:
-            db_conn.close()
         return ret_val
     else :
         print("WARN add requies a list object") 
         return None
-'''
+
 def assign_host_run(lcdef_list) :
     global run_config
     runsonHost = {}
@@ -197,7 +194,7 @@ def __prepare_run (run_id, target_cmd, user_mpirun) :
         for lc_id in lc_list:
             if lc_id in user_loader_conf_def:
                 load_config, num_parallel, tile_workspace = __genLoadConfig(user_loader_conf_def[lc_id]) 
-                jsonfn = os.path.join(run_dir, host+".json")
+                jsonfn = os.path.join(run_dir, "%s_%s.json" % (host, lc_id))
                 with open(jsonfn, 'w') as ofd :
                     json.dump(load_config, ofd)
                 #use user defined, if user skipped, use full
@@ -246,8 +243,8 @@ def getRunSettings(args):
             dryrun = input.lower() in ['1', 'true'] 
 
     if not os.path.exists(loader_config):
-        print("ERROR: cannot find load config file %s, exit..." % loader_config)
-        exit(1)
+        msg = "ERROR: cannot find load config file %s, exit..." % loader_config
+        sys.exit(msg)
     if parallel_config and not os.path.exists(parallel_config):
         print("WARN: cannot find mpirun config file %s, will not use mpirun  ..." % parallel_config)
         parallel_config = None
@@ -260,7 +257,7 @@ if __name__ == '__main__' :
     with open(loader_config, 'r') as ldf:
         loader_def_list = json.load(ldf)
 
-    cfg_items = data_handler.addUserConfigs(loader_def_list)
+    cfg_items = addUserConfigs(loader_def_list)
 
     if (cfg_items) :
         run_id = assign_host_run(cfg_items)
