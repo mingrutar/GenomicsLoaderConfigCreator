@@ -169,8 +169,8 @@ if __name__ == '__main__' :
       if rc:
         target_cmd = [ str(x.rstrip()) for x in cmd.split(' ') ]
         # print('target_cmd=%s' % target_cmd)
-        log2path = "%d-%d-%s_pid.log" % (rundef_id, run_id, g_hostname)
-        log2path = os.path.join(working_dir, "logs", log2path)
+        log_fn = "%d-%d-%s_pid.log" % (rundef_id, run_id, g_hostname)
+        log2path = os.path.join(working_dir, "logs", log_fn)
         print("INFO %s: pidstat.log=%s" % (g_hostname, log2path))
         time_nval, genome_time = measure_more(target_cmd, log2path)
 
