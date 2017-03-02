@@ -80,19 +80,6 @@ def addUserConfigs(user_defined) :
         print("WARN add requies a list object") 
         return None
 
-def assign_host_run(lcdef_list) :
-    global run_config
-    runsonHost = {}
-    num_host = len(my_hostlist)
-    for i, lc in enumerate(lcdef_list):
-        if i < num_host:
-            runsonHost[my_hostlist[i]] = [lc] 
-        else:
-            runsonHost[my_hostlist[i % num_host]].append(lc)
-    run_id = data_handler.addRunConfig( "-".join(lcdef_list), TARGET_TEST_COMMAND )
-    run_config[run_id] = runsonHost
-    return run_id
-
 def __make_path(target_path) :
     if os.path.exists(target_path) :
         shutil.rmtree(target_path)
@@ -189,24 +176,34 @@ def __prepare_run (run_id, target_cmd, user_mpirun) :
     run_dir = os.path.join(working_dir, 'run_%s'%timestamp)
     __make_path(run_dir)
     ret = {}
-    for host, lc_list in run_config[run_id].items() :
-        commandList =[]
-        for lc_id in lc_list:
-            if lc_id in user_loader_conf_def:
-                load_config, num_parallel, tile_workspace = __genLoadConfig(user_loader_conf_def[lc_id]) 
-                jsonfn = os.path.join(run_dir, "%s_%s.json" % (host, lc_id))
-                with open(jsonfn, 'w') as ofd :
-                    json.dump(load_config, ofd)
-                #use user defined, if user skipped, use full
-                if user_mpirun:
-                    mpirun_num = user_mpirun[lc_id] if user_mpirun and lc_id in user_mpirun else num_parallel
-                else:
-                    mpirun_num = 1    
-                theCommand = "%s -np %d %s %s" % (MPIRUN, mpirun_num, target_cmd, jsonfn)  \
-                    if mpirun_num > 1 else "%s %s" % (target_cmd, jsonfn)
-                commandList.append((theCommand, tile_workspace, mpirun_num))
-            ret[host] = commandList   
-    return ret
+    commandList =[]                         # contains all (command, tile_ws, num_proc)
+    for lc_id in run_config[run_id] :
+        if lc_id in user_loader_conf_def:
+            load_config, num_parallel, tile_ws = __genLoadConfig(user_loader_conf_def[lc_id]) 
+            jsonfn = os.path.join(run_dir, "%s-%s.json" % (run_id, lc_id))
+            with open(jsonfn, 'w') as ofd :
+                json.dump(load_config, ofd)
+            # multiple command per loader config according to num_paralle
+            # commands use the same tiledb workspace
+            if user_mpirun and lc_id in user_mpirun:
+                for num_pr in user_mpirun[lc_id]:
+                    theCommand = "%s -np %d %s %s" % (MPIRUN, num_pr, target_cmd, jsonfn)  \
+                        if num_pr > 1 else "%s %s" % (target_cmd, jsonfn)
+                    commandList.append((theCommand, tile_ws, num_pr))
+            else:
+                theCommand = "%s %s" % (target_cmd, jsonfn)
+                commandList.append((theCommand, tile_ws, 1))
+    return assign_host(commandList)
+
+def assign_host( commands):
+    num_host = len(my_hostlist)
+    cmdlist_host = {}
+    for i, cmd in enumerate(commands):
+        if i < num_host:
+            cmdlist_host[my_hostlist[i]] = [cmd]
+        else:
+            cmdlist_host[my_hostlist[i % num_host]].append(  cmd)
+    return cmdlist_host
 
 def launch_run( run_def_id, dryrun, user_mpirun=None) :
     ''' assign host to loader_config. 
@@ -227,6 +224,12 @@ def launch_run( run_def_id, dryrun, user_mpirun=None) :
             print("launching test at %s" % (host))
             os.system("ssh %s %s %d &" % (host, RUN_SCRIPT, run_def_id ))
     print("DONE launch... ")
+
+def assign_run_id(lcdef_list):
+    global run_config 
+    run_id = data_handler.addRunConfig( "-".join(lcdef_list), TARGET_TEST_COMMAND )
+    run_config[run_id] = lcdef_list
+    return run_id
 
 def getRunSettings(args):
     myopts, parsed_args = getopt.getopt(args,"l:r:d")
@@ -260,11 +263,13 @@ if __name__ == '__main__' :
     cfg_items = addUserConfigs(loader_def_list)
 
     if (cfg_items) :
-        run_id = assign_host_run(cfg_items)
+        run_id = assign_run_id(cfg_items)
         if parallel_config:
             with open(parallel_config, 'r') as ldf:
                 mpiruncfg = json.load(ldf)
-            parallel_num = {cfg_items[int(idx)] : num_proc for idx, num_proc in mpiruncfg.items() }
+            parallel_num = {}                   # loader config: list of parall
+            for idx, val in mpiruncfg.items():
+               parallel_num[cfg_items[int(idx)]] = val 
             launch_run(run_id, dryrun, parallel_num)
         else: 
             launch_run(run_id, dryrun)
