@@ -125,19 +125,22 @@ class TimeResultHandler(object):
         
         gtime_labels = []
         gtimes = self.__all_results[0]['gtime']      #  30 labels num_ops x num(gtime_col_header)
-        num_gtime_labels = len(self.genome_db_tags) * len(self.gtime_col_header)
-        gtimes = gtimes[: num_gtime_labels]
+        num_op = len(self.genome_db_tags)
+        perproc_count = 0
         for gt_item in gtimes:
             opname, gdata = self.__get_genome_result4run(gt_item)
             gt_op_labels = [ "%s_%s" % (opname, hname) for hname in self.gtime_col_header ]
             gtime_labels.extend(gt_op_labels)
-        labels = lc_labels +  rtime_labels + gtime_labels
-        csv_fd.write("%s\n" % ",".join(labels))
-        csv_fd.flush()
+            perproc_count += 1
+            if perproc_count % num_op == 0:
+                labels = lc_labels +  rtime_labels + gtime_labels
+                csv_fd.write("%s\n" % ",".join(labels))
+                csv_fd.flush()
+                return
 
     def export2csv(self, run_dir, runid=None):
         my_runid, configDict = self.data_handler.getRunConfigsDict(runid) 
-        assert(my_runid != None and len(configDict) > 1)
+        assert(my_runid != None and len(configDict) > 0)
         print("INFO export test run %d to csv..." % my_runid)
 
         self.__get_all_result(my_runid)
@@ -160,6 +163,7 @@ class TimeResultHandler(object):
                     aRow = lc_data + rtime_data + gtime_data
                     csv_fd.write("%s\n" % ",".join(aRow) )
                     csv_fd.flush()
+                    del gtime_data[:]
         csv_fd.close()
         return filename
 
@@ -183,7 +187,7 @@ if __name__ == '__main__':
 
     run_dir = "run_mpi" 
     resultData.setResultPath(run_dir)
-    runid = 1
+    runid = 6
     csv_file = resultData.export2csv(run_dir, runid)
     print("csv file @ %s" % csv_file)
 
