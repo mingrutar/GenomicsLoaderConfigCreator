@@ -43,8 +43,6 @@ VALUES ("vcf_header_filename", 'Template', "vcf_header");
 INSERT INTO loader_config_tag (name, type, default_value) 
 VALUES ("reference_genome", 'Template', "ref_genome");
 INSERT INTO loader_config_tag (name, type, default_value) 
-VALUES ("do_ping_pong_buffering", 'Boolean', "true");
-INSERT INTO loader_config_tag (name, type, default_value) 
 VALUES ("offload_vcf_output_processing", 'Boolean', "true");
 INSERT INTO loader_config_tag (name, type, default_value) 
 VALUES ("ub_callset_row_idx", 'Number', "999");
@@ -59,8 +57,6 @@ VALUES ("disable_synced_writes", 'Boolean', "true");
 INSERT INTO loader_config_tag (name, type, default_value) 
 VALUES ("delete_and_create_tiledb_array", 'Boolean', "true");
 INSERT INTO loader_config_tag (name, type, default_value) 
-VALUES ("segment_size", 'MB', "10");
-INSERT INTO loader_config_tag (name, type, default_value) 
 VALUES ("ignore_cells_not_in_partition", 'Boolean', "false");
 
 -- for produce_combined_vcf = true ??
@@ -71,10 +67,10 @@ VALUES ("vcf_output_format", 'String', "z");
 
 -- user definable columns 
 INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
-VALUES ("column_partitions", "make_col_partition()", '1', 'bn', 1);
+VALUES ("column_partitions", "make_col_partition()", '1', 'bn', 1); 
 -- unit MiB, default 100 MiB
 INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
-VALUES ("size_per_column_partition", 'MB', "100", 'sp', 1);
+VALUES ("size_per_column_partition", 'MB', "100", 'sp', 1); 
 INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
 -- number parallel read to 1, so far 2 didn't improve' 
 VALUES ("num_parallel_vcf_files", 'Number', "1", 'pf', 1);
@@ -84,4 +80,20 @@ VALUES ("compress_tiledb_array", 'Boolean', "true", 'c', 1);
 -- number cells per tile
 INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
 VALUES ("num_cells_per_tile", 'Number', "1000", 'nt', 1);
+---added after feb 17
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("segment_size", 'MB', "10", 'sg', 1);
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("do_ping_pong_buffering", 'Boolean', "false", 'pb', 1);
 
+-- for query_config_tag --
+INSERT INTO query_config_tag (name, type, default_value) 
+VALUES ("reference_genome", 'Template', "ref_genome");
+INSERT INTO query_config_tag (name, type, default_value) 
+VALUES ("workspace", "getLoaderWorkSpace()", "column_partitions");
+INSERT INTO query_config_tag (name, type, default_value) 
+VALUES ("array", "getLoaderArrayNames()", 1);
+INSERT INTO query_config_tag (name, type, default_value) 
+VALUES ("scan_full", "Boolean", "true");
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("segment_size", 'MB', "10", 'sg', 1);
