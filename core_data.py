@@ -24,8 +24,33 @@ class RunVCFData(object):
         'Run_Config' : 'SELECT loader_configs, _id FROM run_def where _id=%d;',
         'Last_Run_Config' : 'SELECT loader_configs, _id FROM run_def ORDER BY _id desc LIMIT 1;',
         'User_Config' : 'SELECT config FROM loader_config_def where name in (%s);',
-        'Time_Results' : 'SELECT time_result, genome_result, pidstat_path, run_log.num_parallel FROM time_result, run_log where time_result.run_id=run_log._id and run_log.run_def_id=%d order by _id desc;'  }
+        'User_Config_dict' "SELECT name, config FROM loader_config_def where name in (%s);"
+        'Time_Results' : 'SELECT time_result, genome_result, pidstat_path, run_log.lcname, run_log.num_parallel FROM time_result, run_log where time_result.run_id=run_log._id and run_log.run_def_id=%d order by _id desc;',
+
+        # for backwards compatibility only, add lcname. TODO remove when no longer needed        
+        'SELECTALL_RUN_LOG' : 'SELECT * FROM run_log limit 1;',
+        'ADD_LCNAME2RUN_LOG' : 'ALTER table run_log ADD column "lcname" "TEXT";',
+        'SELECT_RUN_LOG' : 'SELECT _id , full_cmd FROM run_log;',
+        'UPDATE_RUN_LOG' : 'UPDATE run_log SET lcname="%s" WHERE _id = %s;'
+          }
     
+    def updateRunLogLCName(self) :
+        mycursor = self.db_conn.cursor()
+        mycursor.execute(self.queries["SELECTALL_RUN_LOG"])
+        if 'lcname' not in [ x[0] for x in mycursor.description ]:
+            mycursor.execute(self.queries['ADD_LCNAME2RUN_LOG'])
+
+        mycursor2 = self.db_conn.cursor()
+        mycursor.execute(self.queries["SELECT_RUN_LOG"])
+        rows = list(mycursor.fetchall())
+        for r in rows:
+            lcname = r[1].split('-')[-1][:-5]
+            update_query = self.queries['UPDATE_RUN_LOG'] % (lcname, r[0])
+            mycursor2.execute(update_query)
+        mycursor.close()
+        mycursor2.close()
+        self.db_conn.commit()
+
     def getRunConfigs(self, runid, bFillFlag=True):
         ''' fillFlag = 0 => no fill, = 1 => fill with '-'; = 2 => fill with default_value '''
         mycursor = self.db_conn.cursor()
@@ -40,6 +65,30 @@ class RunVCFData(object):
             
             if bFillFlag > 0:                # need to fill not overrided tags
                 for cfg in lc_items:
+                    for key, val in definable_tags.items():
+                        if key not in cfg:
+                            cfg[key] = str(val[2])
+                        else:
+                            cfg[key] = "%s*" % cfg[key]
+            return myrunid, lc_items
+        else:
+
+            return None, None
+
+    def getRunConfigsDict(self, runid, bFillFlag=True):
+        ''' fillFlag = 0 => no fill, = 1 => fill with '-'; = 2 => fill with default_value '''
+        mycursor = self.db_conn.cursor()
+        definable_tags = self.getUserDefinableConfigTags(mycursor)
+
+        myrunid, cfg_names = self.getRunConfigNames(runid, mycursor)
+        if cfg_names:
+            query = self.queries['User_Config_dict'] % ",".join( [ "\"%s\"" % x for x in cfg_names ] )
+            lc_items = {}
+            for row in mycursor.execute(query):
+                lc_items[row[0]] = dict(eval(row[1]))     # user overrided tags
+            
+            if bFillFlag > 0:                # need to fill not overrided tags
+                for cfg in lc_items.values():
                     for key, val in definable_tags.items():
                         if key not in cfg:
                             cfg[key] = str(val[2])
@@ -70,7 +119,9 @@ class RunVCFData(object):
             rowresult['rtime'] = dict(eval(row[0]))
             rowresult['gtime'] = eval(row[1])
             rowresult['pidstat'] = eval(row[2])
-            rowresult['n_parallel'] = row[3]
+            rowresult['lcname'] = row[3]
+            rowresult['n_parallel'] = row[4]
+
             all_results.append(rowresult)
         return all_results
 

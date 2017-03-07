@@ -111,46 +111,55 @@ class TimeResultHandler(object):
         pidstas = []
         for pidrow in self.__all_results:
             pidstas.append([ os.path.join(self.__source, 'stats', os.path.basename(fp)) for fp in pidrow['pidstat']])
-#        pidstas = [ map(lambda fp: os.path.join(self.__source, 'stats', os.path.basename(fp)), pidrow['pidstat']) for pidrow in self.__all_results ]
+        # pidstas = [ map(lambda fp: os.path.join(self.__source, 'stats', os.path.basename(fp)), pidrow['pidstat']) for pidrow in self.__all_results ]
         return pidstas
     
     def close(self):
         self.data_handler.close()
 
-    def export2csv(self, runid=None):
-        my_runid, confgiList = self.data_handler.getRunConfigs(runid) 
-        print("INFO export test run %d to csv..." % my_runid)
-        self.__get_all_result(my_runid)
-        labels = []
-        rowlist = []
-        filename = os.path.join(self.__wspace, "csvfiles", "run_%s.csv" % my_runid)
-        csv_fd = open(filename, 'w')
-        for i, row in enumerate(confgiList):
-            aRow = []
-            if i == 0:
-                for k, v in confgiList[i].items():
-                    labels.append(k)
-                    aRow.append(v)
-            else:
-                aRow = [ v for v in confgiList[i].values() ]
-            
-            rtime = self.__all_results[i]['rtime']      # name:val
-            if i == 0:
-                time_labels = [ self.time_row_labels[int(x)] for x in rtime.keys() ]
-                labels.extend(time_labels)
-            tData = [ v for v in rtime.values() ]
-            aRow.extend(tData)
+    def write_csv_labels(csv_fd):
+        ldname = confgiList.keys()[0]
+        lc_labels = [ k for k in confgiList[ldname].keys() ]
+        rtime = self.__all_results[0]['rtime']      # name:val
+        rtime_labels = [ self.time_row_labels[int(x)] for x in rtime.keys() ]
+        
+        gtime_labels = []
+        gtimes = self.__all_results[0]['gtime']      #  30 labels num_ops x num(gtime_col_header)
+        num_gtime_labels = len(self.genome_db_tags) * len(self.gtime_col_header)
+        gtimes = gtimes[: num_gtime_labels]
+        for gt_item in gtimes:
+            opname, gdata = self.__get_genome_result4run(gt_item)
+            gt_op_labels = [ "%s_%s" % (opname, hname) for hname in self.gtime_col_header ]
+            gtime_labels.extend(gen_labels)
+        labels = lc_labels +  rtime_labels + gtime_labels
+        csv_fd.write("%s\n" % ",".join(labels))
+        csv_fd.flush()
 
-            for gtime in self.__all_results[i]['gtime']:      # list
+    def export2csv(self, run_dir, runid=None):
+        my_runid, configDict = self.data_handler.getRunConfigsDict(runid) 
+        assert(my_runid != None and len(confgiList) > 1)
+        print("INFO export test run %d to csv..." % my_runid)
+
+        self.__get_all_result(my_runid)
+        filename = os.path.join(self.__wspace, "csvfiles", "%s_%s.csv" % (run_dir, my_runid))
+        csv_fd = open(filename, 'w')
+        write_csv_labels(csv_fd)
+
+        for row in self.__all_results:
+            lc_data = [ v for v in configDict[row['lcname']].values() ]
+            rtime = self.__all_results[row]['rtime']      # name:val
+            rtime_data = [ v for v in rtime.values() ]
+            perproc_count = 0
+            num_op = len(self.genome_db_tags)
+            gtime_data = []
+            for gtime in self.__all_results[row]['gtime']:      # list
                 opname, gdata = self.__get_genome_result4run(gtime)
-                if i == 0:
-                    gen_labels = [ "%s_%s" % (opname, hname) for hname in self.gtime_col_header ]
-                    labels.extend(gen_labels)
-                aRow.extend(gdata)
-            if i == 0:
-                csv_fd.write("%s\n" % ",".join(labels) )
-            csv_fd.write("%s\n" % ",".join(aRow))
-            csv_fd.flush()
+                gtime_data.extend(gdata)
+                perproc_count += 1
+                if perproc_count % num_op:
+                    aRow = lc_data + rtime_data + gtime_data
+                    csv_fd.write("%s\n" % ",".join(aRow) )
+                    csv_fd.flush()
         csv_fd.close()
         return filename
 
@@ -171,10 +180,11 @@ if __name__ == '__main__':
     mypath = os.path.dirname(sys.argv[0])
     print("mypath=%s" % mypath)
     resultData = TimeResultHandler(mypath)
+
     run_dir = "run_mpi" 
     resultData.setResultPath(run_dir)
     runid = 1
-    csv_file = resultData.export2csv(runid)
+    csv_file = resultData.export2csv(run_dir, runid)
     print("csv file @ %s" % csv_file)
 
     resultData.close()
