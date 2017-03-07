@@ -24,7 +24,7 @@ class RunVCFData(object):
         'Run_Config' : 'SELECT loader_configs, _id FROM run_def where _id=%d;',
         'Last_Run_Config' : 'SELECT loader_configs, _id FROM run_def ORDER BY _id desc LIMIT 1;',
         'User_Config' : 'SELECT config FROM loader_config_def where name in (%s);',
-        'Time_Results' : 'SELECT time_result, genome_result, pidstat_path FROM time_result, run_log where time_result.run_id=run_log._id and run_log.run_def_id=%d;'  }
+        'Time_Results' : 'SELECT time_result, genome_result, pidstat_path, run_log.num_parallel FROM time_result, run_log where time_result.run_id=run_log._id and run_log.run_def_id=%d order by _id desc;'  }
     
     def getRunConfigs(self, runid, bFillFlag=True):
         ''' fillFlag = 0 => no fill, = 1 => fill with '-'; = 2 => fill with default_value '''
@@ -70,6 +70,7 @@ class RunVCFData(object):
             rowresult['rtime'] = dict(eval(row[0]))
             rowresult['gtime'] = eval(row[1])
             rowresult['pidstat'] = eval(row[2])
+            rowresult['n_parallel'] = row[3]
             all_results.append(rowresult)
         return all_results
 
