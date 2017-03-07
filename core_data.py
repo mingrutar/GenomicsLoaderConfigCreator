@@ -24,8 +24,8 @@ class RunVCFData(object):
         'Run_Config' : 'SELECT loader_configs, _id FROM run_def where _id=%d;',
         'Last_Run_Config' : 'SELECT loader_configs, _id FROM run_def ORDER BY _id desc LIMIT 1;',
         'User_Config' : 'SELECT config FROM loader_config_def where name in (%s);',
-        'User_Config_dict' "SELECT name, config FROM loader_config_def where name in (%s);"
-        'Time_Results' : 'SELECT time_result, genome_result, pidstat_path, run_log.lcname, run_log.num_parallel FROM time_result, run_log where time_result.run_id=run_log._id and run_log.run_def_id=%d order by _id desc;',
+        'User_Config_dict' : "SELECT name, config FROM loader_config_def where name in (%s);",
+        'Time_Results' : 'SELECT tr.time_result, tr.genome_result, tr.pidstat_path, rl.lcname, rl.num_parallel FROM time_result tr, run_log rl where tr.run_id=rl._id and rl.run_def_id=%d order by rl._id desc;',
 
         # for backwards compatibility only, add lcname. TODO remove when no longer needed        
         'SELECTALL_RUN_LOG' : 'SELECT * FROM run_log limit 1;',
