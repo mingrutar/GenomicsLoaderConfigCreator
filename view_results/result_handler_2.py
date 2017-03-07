@@ -117,9 +117,9 @@ class TimeResultHandler(object):
     def close(self):
         self.data_handler.close()
 
-    def write_csv_labels(csv_fd):
-        ldname = confgiList.keys()[0]
-        lc_labels = [ k for k in confgiList[ldname].keys() ]
+    def write_csv_labels(self, csv_fd, confgiList):
+        ldname =  next (iter (confgiList.values()))
+        lc_labels = [ k for k in ldname.keys() ]
         rtime = self.__all_results[0]['rtime']      # name:val
         rtime_labels = [ self.time_row_labels[int(x)] for x in rtime.keys() ]
         
@@ -130,33 +130,33 @@ class TimeResultHandler(object):
         for gt_item in gtimes:
             opname, gdata = self.__get_genome_result4run(gt_item)
             gt_op_labels = [ "%s_%s" % (opname, hname) for hname in self.gtime_col_header ]
-            gtime_labels.extend(gen_labels)
+            gtime_labels.extend(gt_op_labels)
         labels = lc_labels +  rtime_labels + gtime_labels
         csv_fd.write("%s\n" % ",".join(labels))
         csv_fd.flush()
 
     def export2csv(self, run_dir, runid=None):
         my_runid, configDict = self.data_handler.getRunConfigsDict(runid) 
-        assert(my_runid != None and len(confgiList) > 1)
+        assert(my_runid != None and len(configDict) > 1)
         print("INFO export test run %d to csv..." % my_runid)
 
         self.__get_all_result(my_runid)
         filename = os.path.join(self.__wspace, "csvfiles", "%s_%s.csv" % (run_dir, my_runid))
         csv_fd = open(filename, 'w')
-        write_csv_labels(csv_fd)
+        self.write_csv_labels(csv_fd, configDict)
 
         for row in self.__all_results:
             lc_data = [ v for v in configDict[row['lcname']].values() ]
-            rtime = self.__all_results[row]['rtime']      # name:val
+            rtime = row['rtime']      # name:val
             rtime_data = [ v for v in rtime.values() ]
             perproc_count = 0
             num_op = len(self.genome_db_tags)
             gtime_data = []
-            for gtime in self.__all_results[row]['gtime']:      # list
+            for gtime in row['gtime']:      # list
                 opname, gdata = self.__get_genome_result4run(gtime)
                 gtime_data.extend(gdata)
                 perproc_count += 1
-                if perproc_count % num_op:
+                if perproc_count % num_op == 0:
                     aRow = lc_data + rtime_data + gtime_data
                     csv_fd.write("%s\n" % ",".join(aRow) )
                     csv_fd.flush()
