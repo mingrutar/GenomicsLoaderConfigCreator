@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS run_log (
    full_cmd TEXT NOT NULL,
    tiledb_ws TEXT NOT NULL,
    host_id REFERENCES host(_id),
+   lcname TEXT DEFAULT '', 
    profiler TEXT DEFAULT 'time',
    profiler_type TEXT DEFAULT 'time',
    creation_ts INTEGER NOT NULL
