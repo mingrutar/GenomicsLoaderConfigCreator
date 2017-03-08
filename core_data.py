@@ -26,6 +26,8 @@ class RunVCFData(object):
         'User_Config' : 'SELECT config FROM loader_config_def where name in (%s);',
         'User_Config_dict' : "SELECT name, config FROM loader_config_def where name in (%s);",
         'Time_Results' : 'SELECT tr.time_result, tr.genome_result, tr.pidstat_path, rl.lcname, rl.num_parallel FROM time_result tr, run_log rl where tr.run_id=rl._id and rl.run_def_id=%d order by rl._id desc;',
+        'Runs_of_RunDef' : 'SELECT lcname, num_parallel, tiledb_ws, host_id, full_cmd FROM run_log where run_def_id=%d;',
+
 
         # for backwards compatibility only, add lcname. TODO remove when no longer needed        
         'SELECTALL_RUN_LOG' : 'SELECT * FROM run_log limit 1;',
@@ -51,6 +53,20 @@ class RunVCFData(object):
         mycursor2.close()
         self.db_conn.commit()
 
+    def __init__(self, db_name=None):
+        self.db_name = db_name if db_name else self.DefaultDBName 
+        self.db_conn = sqlite3.connect(self.db_name)
+        'Runs_of_RunDef' : 'SELECT lcname, num_parallel, tiledb_ws, host_id, full_cmd FROM run_log where run_def_id=%d;',
+
+    def getRunsInfo(runid):
+        assert(runid)
+        mycursor = self.db_conn.cursor()
+        query = self.queries["Runs_of_RunDef"] % runid
+        run_info = []
+        for row in mycursor.execute(query):
+            run_info.append(dict({'lc_name': row[0], 'num_proc': row[1], 'tdb_ws':row[2],'host':row[3],'loader_config':row[4].split()[-1] }))
+        return run_info
+        
     def getRunConfigs(self, runid, bFillFlag=True):
         ''' fillFlag = 0 => no fill, = 1 => fill with '-'; = 2 => fill with default_value '''
         mycursor = self.db_conn.cursor()
@@ -124,10 +140,6 @@ class RunVCFData(object):
 
             all_results.append(rowresult)
         return all_results
-
-    def __init__(self, db_name=None):
-        self.db_name = db_name if db_name else self.DefaultDBName 
-        self.db_conn = sqlite3.connect(self.db_name)
 
     def getExtraData(self, extra_data_key):
         return self.__extra_data[extra_data_key] if extra_data_key in  self.__extra_data else None
