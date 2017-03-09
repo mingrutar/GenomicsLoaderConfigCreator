@@ -3,6 +3,10 @@ import os, re
 import os.path
 import json
 import time
+from histogram import HistogramManager
+from core_data import RunVCFData
+from copy import deepcopy
+import platform
 
 '''
 Test config 16 partitions, within a segment size  
@@ -45,73 +49,81 @@ db: experiement: _id, histogram
     "query_attributes" : [ "REF", "ALT", "BaseQRankSum", "MQ", "MQ0", "ClippingRankSum", "MQRankSum", "ReadPosRankSum", "DP", "GT", "GQ", "SB", "AD", "PL", "DP_FORMAT", "MIN_DP" ]
 
 '''
-my_hostlist = []
-my_templates = {}
-data_handler = None
-working_dir = os.environ.get('WS_HOME', os.getcwd())
-
+PARTITION_NUM = 16    
 TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/gt_mpi_gather"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
 
-def load_from_db() :
+working_dir = os.environ.get('WS_HOME', os.getcwd())
+query_ws_path = os.path.join(working_dir, 'run_query_ws')
 
-def __find_loader(runid=None):
-    ''' for now find the last one '''
-    loader_ws_path = os.path.join(working_dir, 'run_ws')
-    host_loader_cfg = {}
-    loader_runid = runid
-    for host in my_hostlist:
-        run_cfg = os.path.join(loader_ws_path, host)
-        if os.path.exists(run_cfg):
-            with open(run_cfg, 'r') as rfd:
-                run_info = json.load(rfd)
-            if not loader_runid:
-                loader_runid = run_info['run_id']
-            if loader_runid == run_info['run_id']:
-                loader_cfg = run_info['cmd'].split()[1]
-                host_loader_cfg[host] = loader_cfg
-    query_run_id = data_handler.addQueryRun(loader_runid, TARGET_TEST_COMMAND)
-    return host_loader_cfg, query_run_id
+PosSelection = { HistogramManager.DIST_RANDOM: 500,  
+    HistogramManager.DIST_DENSE:50, HistogramManager.DIST_SPARSE: 60 }
 
-def launch_query(query_json, dryrun=False):
-    query_ws_path = os.path.join(working_dir, 'run_query_ws')
-    host_loader_cfg, run_id = __find_loader()
-    for host, lc in host_loader_cfg.items():
-        cmd = "{} -l {} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, lc, query_json)
-        exec_json = dict({'run_id' : run_id, 'cmd': cmd })
-        exec_json_fn = os.path.join(query_ws_path, host)
-        with open(exec_json_fn, 'w') as ofd :
-            json.dump(exec_json, ofd)
-        if dryrun :
-            shell_cmd = "ssh %s python %s %s &" % (host, RUN_SCRIPT, exec_json_fn )
-            print('DRYRUN: os.system(%s)' % shell_cmd )
-        else :
-            print("launching test at %s" % (host))
-            os.system("ssh %s %s %s &" % (host, RUN_SCRIPT, exec_json_fn ))
+# for our test
+def prepareTest(test_def):
+    data_handler = core_data.RunVCFData(test_def['source_db_path'])
+
+    query_def_list = [ load_run_id['run_id'] for load_run_id in test_def.test_batch ]
+    q_def_run_id = data_handler.addQueryRun( str(query_def_list), TARGET_TEST_COMMAND)
+
+    my_templates = data_handler.getTemplates(working_dir)
+    tq_master["vid_mapping_file"] = my_templates['vid']
+    tq_master["reference_genome"] = my_templates["ref_genome"]  
+    tq_master["callset_mapping_file"] = my_templates['callsets']
+    tq_master["query_attributes"] = [ "REF", "ALT", "BaseQRankSum", "MQ", "MQ0", "ClippingRankSum", "MQRankSum", "ReadPosRankSum", "DP", "GT", "GQ", "SB", "AD", "PL", "DP_FORMAT", "MIN_DP" ]
+
+    histogram_fn = data_handler.getExtraData('histogram_file_path')
+    if not histogram_fn:
+        histogram_fn = os.path.join(working_dir, 'templates', '1000_histogram')
+    histogramManager = HistogramManager(histogram_fn)
+    
+    bin_start_list = histogramManager.calc_bin_idx_pos(PARTITION_NUM)
+    hosts={}
+    
+    for batch in test_def.test_batch:
+        run_info_list = data_handler.getRunsInfo(batch['run_id'])   # get loader info
+        for run in run_info_list:
+            host = run['host']
+            # host_ws_dir = os.path.join(query_ws_path, host)
+            # if not os.path.isdir(host_ws_dir):
+            #     os.mkdir(host_ws_dir)
+            if host not in hosts:
+                hosts[host] = []
+            tq_params = deepcopy (tq.master)
+            tq_params["workspace"] = run['tdb_ws']
+            if run['num_proc'] == 1:
+                tq_params['array'] = 'TEST0'
+            else:
+                tq_params['array'] = [ 'TEST%d' % i for i in range(run['num_proc'])]
+            for seg_size in test_def['segment_size']:
+                npq_params = deepcopy(tq_params)
+                npq_params['segment_size'] = seg_size
+                for dist_name, num_pos in PosSelection.items():
+                    from_bins = [ i in range(run['num_proc'])] 
+                    npq_params['query_column_ranges'] = histogramManager.getPositions(dist_name, num_pos, from_bins)
+                    query_fn = os.path.join(query_ws_path, 'query_%s-%d-%s.json' % (run['lc_name'], seg_size, pos_dist))
+                    with open(query_fn, 'w') as wfd:
+                        json.dump(npq_params)
+                    cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
+                    if run['num_proc'] > 1:
+                        cmd = "mpirun -np %d %s" % (run['num_proc'], cmd)
+                    data_handler.addRunLog(q_def_run_id, host, cmd, run['tdb_ws'],  run['num_proc'])
+                    hosts[host].append(cmd)
+    data_handler.close()
+    return hosts, q_def_run_id
+
+def launch_query(host_run_list, q_def_run_id):
+    for host, cmd_list in host_run_list.items():
+        for cmd in cmd_list:
+            if dryrun :
+                shell_cmd = "ssh %s %s %s &" % (host, RUN_SCRIPT, q_def_run_id)
+                print('DRYRUN: os.system(%s)' % shell_cmd )
+            else :
+                print("launching test at %s, cmd= %s %s" % (host, RUN_SCRIPT, q_def_run_id))
+                os.system("ssh %s %s %s &" % (host, RUN_SCRIPT, q_def_run_id ))
     print("DONE launch... ")
 
-def fillPartialQuery(data_handler, lcName):
-    
-def parseTestDefinition(test_def):
-    global data_handler, my_hostlist, my_templates
-    data_handler = core_data.RunVCFData(test_def['source_db_path'])
-    my_templates = data_handler.getTemplates(working_dir)
-
-    hosts={}
-    for batch in test_def.test_batch:
-        run_info_list = core_data.getRunsInfo(batch['run_id'])
-        for run in run_info_list:
-            if run['host'] not in hosts:
-                hosts[run['host']] = []
-            pquery = fillPartialQuery(data_handler, run['lc_name'])
-            
-            hosts[run['host']].append( )
-            
-#    {'lc_name': row[0], 'num_proc': row[1], 'tdb_ws':row[2],'host':row[3],'loader_config':row[4].split()[-1] }))
- 
 if __name__ == '__main__' :
-    load_from_db()
-
     query_config = sys.argv[1] if(len(sys.argv) > 1) else "test_query_def.json"
     query_cfg_fn = os.path.join(working_dir, query_config)
 
@@ -119,4 +131,12 @@ if __name__ == '__main__' :
         
         with open(query_cfg_fn, 'r') as ifd:
             test_def = json.load(ifd)
-        launch_query(query_cfg_fn, dryrun=True )
+
+        if os.path.isdir(query_ws_path):
+            os.path.remove (query_ws_path)      #TODO: remove all
+        os.makedir(query_ws_path)
+
+        host_cfg_list, run_ids = prepareTest(test_def)
+        if platform.system() != 'Windows':          # real run
+            launch_query(host_cfg_list, run_ids )
+    print("DONE ... ")
