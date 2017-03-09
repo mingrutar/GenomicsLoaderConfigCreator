@@ -1,0 +1,69 @@
+import os, os.path
+import pandas
+import math
+import random
+
+class HistogramManager(object):
+    DIST_RANDOM = 'random'
+    DIST_DENSE = 'dense'
+    DIST_SPARSE = 'sparse'
+
+    def __init__(self, file_path):
+        if os.path.isfile(file_path):
+            self.df = pandas.read_csv(file_path,skiprows=1,skipfooter=1, engine='python')
+            self.df.columns = ['start_pos', 'end_pos', 'byte_size']
+            self.df['pos'] = self.df.index 
+        else:
+            pprint("WARN, file %s not found" % file_path)
+
+    def calc_bin_idx_pos(self, bin_num):
+        ''' return a list of begin pos '''
+        bin_size = math.ceil(self.df['byte_size'].sum() / bin_num)
+        bin_start_list = []
+        subtotal = 0
+        parnum = 0
+        begin = 0
+        for idx, row in self.df.iterrows():
+            if idx == 0:
+                bin_start_list.append(row)
+            subtotal += row['byte_size']
+            if (parnum < bin_num-1) and (subtotal > bin_size) :
+                bin_start_list.append(row)
+                parnum += 1
+                subtotal = 0
+        return bin_start_list
+
+    def calc_bin_begin_pos(self, bin_num):
+        bin_start_list = self.calc_bin_idx_pos(bin_num)
+        begin_list = [ item['start_pos'] for item in bin_start_list.iterrows() ]
+        return begin_list
+
+    def densePos(self, mydf, num_pos):
+        mid = math.sqrt(num_pos)
+        v1 = int(mid + 0.5)
+        v2 = math.ceil(mid)
+        denselist = mydf.sort_values(['byte_size'], ascending=False).head(v1)
+        pos_list = []
+        for idx, row in denselist.iterrows():
+            pos_list.extend(random.sample(range(row['start_pos'], row['end_pos']), v2))
+        return pos_list[:num_pos]
+
+    def sparsePos(self, mydf, num_pos):
+        start_pos = mydf['start_pos'].iloc[0]
+        end_pos = mydf['end_pos'].iloc[-1]
+        gap = math.floor(( end_pos - start_pos ) /(num_pos))
+        start = random.randint(1, gap-1) + start_pos
+        pos_list = [ pos for pos in range(start, end_pos, gap) ]
+        return pos_list
+
+    def getPositions(self, dist_type, num_pos, ixfirst, ixlast):
+        sect_df = self.df[ixfirst:ixlast]
+        if dist_type == self.DIST_RANDOM:
+            pos_list = random.sample(range(sect_df['start_pos'].iloc[0], sect_df['end_pos'].iloc[-1]), num_pos)
+        elif dist_type == self.DIST_DENSE:
+            pos_list = self.densePos(sect_df, num_pos)  
+        elif dist_type == self.DIST_SPARSE: 
+            pos_list = self.sparsePos(sect_df, num_pos)     
+        else:
+            raise ValueError
+        return pos_list
