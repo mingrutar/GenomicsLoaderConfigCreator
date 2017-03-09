@@ -56,8 +56,9 @@ class HistogramManager(object):
         pos_list = [ pos for pos in range(start, end_pos, gap) ]
         return pos_list
 
-    def getPositions(self, dist_type, num_pos, ixfirst, ixlast):
-        sect_df = self.df[ixfirst:ixlast]
+    def getPositions(self, dist_type, num_pos, from_to):
+        eix = from_to[1] if from_to[1] else self.df.iloc[len(self.df)-1]['pos']
+        sect_df = self.df[from_to[0] : eix]
         if dist_type == self.DIST_RANDOM:
             pos_list = random.sample(range(sect_df['start_pos'].iloc[0], sect_df['end_pos'].iloc[-1]), num_pos)
         elif dist_type == self.DIST_DENSE:

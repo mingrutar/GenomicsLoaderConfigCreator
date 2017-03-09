@@ -8,57 +8,19 @@ from core_data import RunVCFData
 from copy import deepcopy
 import platform
 from shutil import rmtree
-
+from itertools import chain
 '''
-Test config 16 partitions, within a segment size  
-   1) randomly pick 1000 positions and run N times
-   2) pick sparse that distance > buf_size
-   3) pick 20 positions in dense bin  
+peformance test for genomics data retriever
 '''
-'''
-preparation:  From loader_config and mpirun json:
-loader_config_def.json and mpirun.json: 
-    bn16
-    bn16nt100|{u'column_partitions': 16, u'num_cells_per_tile': 100}|1488407619
-    14|bn16nt10000|{u'column_partitions': 16, u'num_cells_per_tile': 10000}|1488407619
-    15|bn16nt100000|{u'column_partitions': 16, u'num_cells_per_tile': 100000}|1488407619
-    16|bn16nt1000000
-select * from run_def order by _id desc - find required runs
-select * from run_log where run_def_id=21 - hostname, tiledb_ws, full loader_config.json
- => latest tiledbs ("workspace" : "/tmp/ws/", "array" : "t0_1_2")
-check if all available  =>{run_log_id: workspace, astartPos, array_name, histgram_list } 
-  from full_loader_config: "array": "TEST15", "begin": 2849200000,
-            "workspace": "/mnt/app_hdd1/scratch/mingperf/tiledb-ws_1703011104/"
-
-process: set segment_size   - we need to tune this value
-    class PositionPicker: histogram, begin, end position()
-            def pick_random(num_position)
-            def pick_sparse(distance, upperlimit) return position with description
-            def pick_dense()
-
-db: experiement: _id, histogram
-  query_config_def: experiement_id, loader_config_def_id, run_def_id=21, num_parallel, partition_density
-  query_test: query_config_def_id, pick_type, num_position, path_to_positions
-  use time_result, run_log
-  query_config_tag: 
-        "workspace" : "/tmp/ws/",
-    "array" : "t0_1_2",
-    "query_column_ranges" : [ [ [0, 100 ], 500 ] ],
-    "query_row_ranges" : [ [ [0, 2 ] ] ],
-    "vid_mapping_file" : "",
-    "segment_size" : 
-    "query_attributes" : [ "REF", "ALT", "BaseQRankSum", "MQ", "MQ0", "ClippingRankSum", "MQRankSum", "ReadPosRankSum", "DP", "GT", "GQ", "SB", "AD", "PL", "DP_FORMAT", "MIN_DP" ]
-
-'''
-PARTITION_NUM = 16    
+PARTITION_NUM = 16       # TODO hard coded for now
 TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/gt_mpi_gather"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
 
 working_dir = os.environ.get('WS_HOME', os.getcwd())
 query_ws_path = os.path.join(working_dir, 'ws_test_query')
-
-PosSelection = { HistogramManager.DIST_RANDOM: 500,  
-    HistogramManager.DIST_DENSE:50, HistogramManager.DIST_SPARSE: 60 }
+# 500, 50, 60
+PosSelection = { HistogramManager.DIST_RANDOM: 20,  
+    HistogramManager.DIST_DENSE:12, HistogramManager.DIST_SPARSE: 25 }
 
 # for our test
 def prepareTest(test_def):
@@ -76,11 +38,13 @@ def prepareTest(test_def):
     histogram_fn = data_handler.getExtraData('histogram_file_path')
     if not histogram_fn:
         histogram_fn = os.path.join(working_dir, 'templates', '1000_histogram')
-    histogramManager = HistogramManager(histogram_fn)
+    hm = HistogramManager(histogram_fn)
     
-    bin_start_list = histogramManager.calc_bin_idx_pos(PARTITION_NUM)
+    bin_list = hm.calc_bin_idx_pos(PARTITION_NUM)
+    bin_pos_list = [(bin_list[i]['pos'], bin_list[i+1]['pos']-1) for i in range(PARTITION_NUM-1)]
+    bin_pos_list.append((bin_list[PARTITION_NUM-1]['pos'], None))
     hosts={}
-    
+        
     for batch in test_def['test_batch']:
         run_info_list = data_handler.getRunsInfo(batch['run_id'])   # get loader info
         for run in run_info_list:
@@ -100,11 +64,11 @@ def prepareTest(test_def):
                 npq_params = deepcopy(tq_params)
                 npq_params['segment_size'] = seg_size
                 for dist_name, num_pos in PosSelection.items():
-                    from_bins = [ i in range(run['num_proc'])] 
-                    npq_params['query_column_ranges'] = histogramManager.getPositions(dist_name, num_pos, from_bins)
-                    query_fn = os.path.join(query_ws_path, 'query_%s-%d-%s.json' % (run['lc_name'], seg_size, pos_dist))
+                    selected_pos =[ hm.getPositions(dist_name, num_pos, bin_pos_list[ix]) for ix in range(run['num_proc']) ]
+                    npq_params['query_column_ranges'] = list(chain.from_iterable(selected_pos))
+                    query_fn = os.path.join(query_ws_path, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, dist_name))
                     with open(query_fn, 'w') as wfd:
-                        json.dump(npq_params)
+                        json.dump(npq_params, wfd)
                     cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
                     if run['num_proc'] > 1:
                         cmd = "mpirun -np %d %s" % (run['num_proc'], cmd)

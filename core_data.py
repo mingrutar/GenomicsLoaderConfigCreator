@@ -258,12 +258,3 @@ class RunVCFData(object):
         self.db_conn.commit()
         mycursor.close()
         return run_id  
-
-    def addQueryRun(self, run_id, cmd):
-        mycursor = self.db_conn.cursor()
-        stmt = self.queries['INSERT_QUERY_RUN_DEF'] % (run_id, cmd, int(time.time()) )
-        mycursor.execute(stmt)
-        run_id = mycursor.lastrowid
-        self.db_conn.commit()
-        mycursor.close()
-        return run_id
