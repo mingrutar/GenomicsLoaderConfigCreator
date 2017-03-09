@@ -57,7 +57,7 @@ class RunVCFData(object):
         self.db_name = db_name if db_name else self.DefaultDBName 
         self.db_conn = sqlite3.connect(self.db_name)
 
-    def getRunsInfo(runid):
+    def getRunsInfo(self, runid):
         assert(runid)
         mycursor = self.db_conn.cursor()
         query = self.queries["Runs_of_RunDef"] % runid
