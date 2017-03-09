@@ -56,7 +56,6 @@ class RunVCFData(object):
     def __init__(self, db_name=None):
         self.db_name = db_name if db_name else self.DefaultDBName 
         self.db_conn = sqlite3.connect(self.db_name)
-        'Runs_of_RunDef' : 'SELECT lcname, num_parallel, tiledb_ws, host_id, full_cmd FROM run_log where run_def_id=%d;',
 
     def getRunsInfo(runid):
         assert(runid)
@@ -66,7 +65,7 @@ class RunVCFData(object):
         for row in mycursor.execute(query):
             run_info.append(dict({'lc_name': row[0], 'num_proc': row[1], 'tdb_ws':row[2],'host':row[3],'loader_config':row[4].split()[-1] }))
         return run_info
-        
+
     def getRunConfigs(self, runid, bFillFlag=True):
         ''' fillFlag = 0 => no fill, = 1 => fill with '-'; = 2 => fill with default_value '''
         mycursor = self.db_conn.cursor()
