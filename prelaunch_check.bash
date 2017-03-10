@@ -1,7 +1,7 @@
 #! /bin/bash
 # run:
 # for r in $(find $HOME/GenomicsDBPerfTest/loaders -name '*.json' -exec basename {} \; | cut -d'_' -f1); do ssh $r $HOME/GenomicsDBPerfTest/prelaunch.bash;done
-TEST_WS_DIR="/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
+# TEST_WS_DIR="/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
 #clean_caches util path
 CLEAN_CACHES="/tools/utilities/bin/clear_caches.sh"
 #executable
@@ -65,18 +65,18 @@ check4run() {
      echo "$(hostname) sudo $CLEAN_CACHES worked ok"
   fi
 
-  echo "clean test disk $TEST_WS_DIR, current df -h:" 
-  df -h $TEST_WS_DIR
   if [ -d $TEST_WS_DIR ] ; then
      [[ -f $TEST_WS_DIR/__tiledb_workspace.tdb ]] ||  touch $TEST_WS_DIR/__tiledb_workspace.tdb
      [[ -f $TEST_WS_DIR/__tiledb_group.tdb ]] ||  touch $TEST_WS_DIR/__tiledb_group.tdb
      rm -rf $TEST_WS_DIR/TEST*
+     echo "removed old TEST* from tiledb workspace $TEST_WS_DIR" 
   else
     mkdir -p $TEST_WS_DIR
     $INIT_TILEDB $TEST_WS_DIR
     $(dirname $EXEC_NAME)/create_tiledb_workspace $TEST_WS_DIR
+    echo "created tiledb workspace $TEST_WS_DIR" 
   fi
-  echo "after cleaning: df -h:"
+  echo "Output of df -h $TEST_WS_DIR :"
   df -h $TEST_WS_DIR
 
   #check mpirun
@@ -84,7 +84,7 @@ check4run() {
     echo "$(hostname) :  $(basename $MPIRUN) not found. Install it first.. exit";
     return 1;
   fi
-
+  sleep 3          # for sync to catch up
   return 0
 }
 

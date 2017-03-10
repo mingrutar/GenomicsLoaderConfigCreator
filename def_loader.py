@@ -106,24 +106,9 @@ def make_col_partition(bin_num):
         print("WARN: no histogram file. 1 partition only")      
         partitions.append({"array" :"TEST0", "begin" : 0, "workspace" : tile_workspace })
     else:    
-        with open(histogram_fn, 'r') as rfd:
-            context = rfd.readlines()
-        lines = [ l.split(',') for l in context ]
-        hgram = [ (x[0], x[1], float(x[2].rstrip()) ) for x in lines if len(x) == 3 ]
-        bin_size = sum( [ x[2] for x in hgram] ) / bin_num
-        subtotal = 0
-        parnum = 0
-        begin = 0
-        for item in hgram:
-            if subtotal == 0 :
-                begin = int(item[0])
-            subtotal += item[2]
-            if (parnum < bin_num-1) and (subtotal > bin_size) :
-                partitions.append({"array" :"TEST%d" % parnum,
-                    "begin" : begin, "workspace" : tile_workspace })
-                parnum += 1
-                subtotal = 0
-        if (subtotal > 0) :
+        hm = HistogramManager(histogram_fn)
+        begin_list = hm.calc_bin_begin_pos( bin_num)
+        for parnum, begin in enumerate(begin_list):
             partitions.append({"array" :"TEST%d" % parnum,
                 "begin" : begin, "workspace" : tile_workspace })
     return partitions

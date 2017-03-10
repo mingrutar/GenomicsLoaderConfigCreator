@@ -13,24 +13,27 @@ from itertools import chain
 peformance test for genomics data retriever
 '''
 PARTITION_NUM = 16       # TODO hard coded for now
+# define number of positions to pcik for random, dense and sparse
+PosSelection = { HistogramManager.DIST_RANDOM: 500,  
+    HistogramManager.DIST_DENSE: 50, HistogramManager.DIST_SPARSE: 60 }
+
 TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/gt_mpi_gather"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
 
 working_dir = os.environ.get('WS_HOME', os.getcwd())
 query_ws_path = os.path.join(working_dir, 'ws_test_query')
-# 500, 50, 60
-PosSelection = { HistogramManager.DIST_RANDOM: 20,  
-    HistogramManager.DIST_DENSE:12, HistogramManager.DIST_SPARSE: 25 }
 
 # for our test
 def prepareTest(test_def):
-    data_handler = RunVCFData(test_def['source_db_path'])
+    db_path = os.path.join(working_dir, test_def['source_db_path'])
+    data_handler = RunVCFData(db_path)
 
     query_def_list = [ load_run_id['run_id'] for load_run_id in test_def['test_batch'] ]
     q_def_run_id = data_handler.addRunConfig( str(query_def_list), TARGET_TEST_COMMAND)
-
+    print("INFO: test query run id is %d" % q_def_run_id)
+    
     my_templates = data_handler.getTemplates(working_dir)
-    tq_master= {"vid_mapping_file" : 'vid'}
+    tq_master= {"vid_mapping_file" : my_templates['vid']}
     tq_master["reference_genome"] = my_templates["ref_genome"]  
     tq_master["callset_mapping_file"] = my_templates['callsets']
     tq_master["query_attributes"] = [ "REF", "ALT", "BaseQRankSum", "MQ", "MQ0", "ClippingRankSum", "MQRankSum", "ReadPosRankSum", "DP", "GT", "GQ", "SB", "AD", "PL", "DP_FORMAT", "MIN_DP" ]
@@ -96,8 +99,8 @@ if __name__ == '__main__' :
     if os.path.isfile(query_cfg_fn) :
         with open(query_cfg_fn, 'r') as ifd:
             test_def = json.load(ifd)
-
-        rmtree(query_ws_path) if os.path.isdir(query_ws_path) else Pass
+        if os.path.isdir(query_ws_path):
+            rmtree(query_ws_path) 
         os.mkdir(query_ws_path)
 
         host_cfg_list, run_ids = prepareTest(test_def)
