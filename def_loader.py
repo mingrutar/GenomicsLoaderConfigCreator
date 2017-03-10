@@ -13,7 +13,8 @@ import core_data
 
 one_KB = 1024
 one_MB = 1048576
-TILE_WORKSPACE_ROOT = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
+TILE_WORKSPACE_PREFIX = "/mnt/app_hdd1/scratch/mingquery/tiledb-ws"
+# befor 3/92017: TILE_WORKSPACE_PREFIX = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
 TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb"
 MPIRUN = "/opt/openmpi/bin/mpirun"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
@@ -138,7 +139,7 @@ def __genLoadConfig( lc_items ) :
     # tile db ws is tiledb-ws_ts
     global tile_workspace
     timestamp = datetime.now().strftime("%y%m%d%H%M")
-    tile_workspace = "%s_%s/" % (TILE_WORKSPACE_ROOT, timestamp)
+    tile_workspace = "%s_%s/" % (TILE_WORKSPACE_PREFIX, timestamp)
 
     # val from db tale
     for key, val in loader_tags.items() :
