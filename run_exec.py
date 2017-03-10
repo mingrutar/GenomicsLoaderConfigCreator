@@ -12,8 +12,8 @@ import time
 import os.path
 from datetime import datetime
 
-PIDSTAT_INTERVAL = 15        #in sec
-TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
+PIDSTAT_INTERVAL = 2        #in sec
+# no longer in use TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 
 DEVNULL = open(os.devnull, 'wb', 0)
 working_path = os.getcwd()
