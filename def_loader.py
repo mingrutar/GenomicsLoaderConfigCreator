@@ -9,7 +9,8 @@ import uuid
 from datetime import datetime
 import time
 import shutil
-import core_data
+from histogram import HistogramManager
+from core_data import RunVCFData
 
 one_KB = 1024
 one_MB = 1048576
@@ -31,7 +32,7 @@ defined_runs = {}           # dbid,
 user_loader_conf_def = {}       # { uuid : { tag : val} }
 run_config = {}                 # { uuid : [ (host, lcdef) ] }
 
-data_handler = core_data.RunVCFData()
+data_handler = RunVCFData()
 histogram_fn = None
 working_dir = os.environ.get('WS_HOME', os.getcwd())
 tile_workspace = ""
@@ -129,7 +130,6 @@ def __getValue(itemType, itemVal) :
         return globals()[itemType[:-2]](itemVal)
     else:
         return None
-
 #SELECT name, type, default_value FROM loader_config_tag
 # user only define the value
 def __genLoadConfig( lc_items ) :
@@ -138,7 +138,7 @@ def __genLoadConfig( lc_items ) :
     mpirun_num = 1
     # tile db ws is tiledb-ws_ts
     global tile_workspace
-    timestamp = datetime.now().strftime("%y%m%d%H%M")
+    timestamp = int(time.mktime(datetime.now().timetuple()))
     tile_workspace = "%s_%s/" % (TILE_WORKSPACE_PREFIX, timestamp)
 
     # val from db tale
@@ -204,7 +204,7 @@ def launch_run( run_def_id, dryrun, user_mpirun=None) :
         for runCmd in runCmdList:
             run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[2])
         if dryrun :
-            shell_cmd = "ssh %s python %d &" % (host, run_def_id )
+            shell_cmd = "ssh %s %s %d &" % (host, RUN_SCRIPT, run_def_id )
             print('DRYRUN: os.system(%s)' % shell_cmd )
         else :
             print("launching test at %s" % (host))

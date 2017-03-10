@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS host (
     user_definable INTEGER DEFAULT 0,
     CONSTRAINT name_uniq UNIQUE (name ) ON CONFLICT REPLACE
 );
---- query config tags, with default_value 
+--- query config tags, with default_value, not in use yet
  CREATE TABLE IF NOT EXISTS query_config_tag (
     _id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,

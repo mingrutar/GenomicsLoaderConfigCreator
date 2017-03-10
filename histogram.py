@@ -2,6 +2,7 @@ import os, os.path
 import pandas
 import math
 import random
+import numpy as num_pos
 
 class HistogramManager(object):
     DIST_RANDOM = 'random'
@@ -35,7 +36,7 @@ class HistogramManager(object):
 
     def calc_bin_begin_pos(self, bin_num):
         bin_start_list = self.calc_bin_idx_pos(bin_num)
-        begin_list = [ item['start_pos'] for item in bin_start_list.iterrows() ]
+        begin_list = [ item['start_pos'].item() for item in bin_start_list ]
         return begin_list
 
     def densePos(self, mydf, num_pos):
