@@ -68,7 +68,7 @@ def prepareTest(test_def):
                 npq_params['segment_size'] = seg_size
                 for dist_name, num_pos in PosSelection.items():
                     selected_pos =[ hm.getPositions(dist_name, num_pos, bin_pos_list[ix]) for ix in range(run['num_proc']) ]
-                    npq_params['query_column_ranges'] = list(chain.from_iterable(selected_pos))
+                    npq_params['query_column_ranges'] = list(list(chain.from_iterable(selected_pos)))
                     query_fn = os.path.join(query_ws_path, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, dist_name))
                     with open(query_fn, 'w') as wfd:
                         json.dump(npq_params, wfd)

@@ -176,15 +176,15 @@ def __prepare_run (run_id, target_cmd, user_mpirun) :
                     if num_pr > 1:
                         jsonfn, tile_ws = __generateLoaderConfigFile(run_dir, "%s-%s" % (run_id, num_pr), lc_id )
                         theCommand = "%s -np %d %s %s" % (MPIRUN, num_pr, target_cmd, jsonfn) 
-                        mpirunList.append((theCommand, tile_ws, num_pr))
+                        mpirunList.append((theCommand, tile_ws, num_pr, lc_id))
                     else:
                         jsonfn, tile_ws = __generateLoaderConfigFile(run_dir, "%s" % run_id, lc_id )
                         theCommand = "%s %s" % (target_cmd, jsonfn)
-                        commandList.append((theCommand, tile_ws, 1))
+                        commandList.append((theCommand, tile_ws, 1, lc_id))
             else:
                 jsonfn, tile_ws = __generateLoaderConfigFile(run_dir, "%s" % run_id, lc_id )
                 theCommand = "%s %s" % (target_cmd, jsonfn)
-                commandList.append((theCommand, tile_ws, 1))
+                commandList.append((theCommand, tile_ws, 1, lc_id))
     return assign_host(commandList, mpirunList)
 
 def assign_host( commands, mpirunList ):
@@ -206,7 +206,7 @@ def launch_run( run_def_id, dryrun, user_mpirun=None) :
     print("START run batch id %s %d loaders @ %s" % (run_def_id, len(launch_now), datetime.now()))
     for host, runCmdList in launch_now.items():
         for runCmd in runCmdList:
-            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[2])
+            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[3], runCmd[2])
         if dryrun :
             shell_cmd = "ssh %s %s %d &" % (host, RUN_SCRIPT, run_def_id )
             print('DRYRUN: os.system(%s)' % shell_cmd )
@@ -217,7 +217,7 @@ def launch_run( run_def_id, dryrun, user_mpirun=None) :
     print("INFO run these %d commands @ host locally +++" % len(launch_manual) )
     for host, runCmdList in launch_manual.items():
         for runCmd in runCmdList:
-            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[2])
+            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[3], runCmd[2])
         print('command@%s : %s %s' % (host, RUN_SCRIPT, run_def_id))
     print("DONE launch... ")
 
