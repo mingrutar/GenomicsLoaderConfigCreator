@@ -47,7 +47,7 @@ def prepareTest(test_def):
     bin_pos_list = [(bin_list[i]['pos'], bin_list[i+1]['pos']-1) for i in range(PARTITION_NUM-1)]
     bin_pos_list.append((bin_list[PARTITION_NUM-1]['pos'], None))
     hosts={}
-        
+    file_count = 0    
     for batch in test_def['test_batch']:
         run_info_list = data_handler.getRunsInfo(batch['run_id'])   # get loader info
         for run in run_info_list:
@@ -68,16 +68,19 @@ def prepareTest(test_def):
                 npq_params['segment_size'] = seg_size
                 for dist_name, num_pos in PosSelection.items():
                     selected_pos =[ hm.getPositions(dist_name, num_pos, bin_pos_list[ix]) for ix in range(run['num_proc']) ]
-                    npq_params['query_column_ranges'] = list(list(chain.from_iterable(selected_pos)))
+                    pos_list = list(chain.from_iterable(selected_pos))
+                    npq_params['query_column_ranges'] = [ pos_list ]
                     query_fn = os.path.join(query_ws_path, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, dist_name))
                     with open(query_fn, 'w') as wfd:
                         json.dump(npq_params, wfd)
+                    file_count += 1
                     cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
                     if run['num_proc'] > 1:
                         cmd = "mpirun -np %d %s" % (run['num_proc'], cmd)
                     data_handler.addRunLog(q_def_run_id, host, cmd, run['tdb_ws'],  run['num_proc'])
                     hosts[host].append(cmd)
     data_handler.close()
+    print("INFO: Generated %d query json @ %s" % (file_count, query_ws_path))
     return hosts, q_def_run_id
 
 def launch_query(host_run_list, q_def_run_id):
@@ -106,4 +109,6 @@ if __name__ == '__main__' :
         host_cfg_list, run_ids = prepareTest(test_def)
         if platform.system() != 'Windows':          # real run
             launch_query(host_cfg_list, run_ids )
-    print("DONE ... ")
+            print("DONE Launch... ")
+        else:
+            print("DRYRUN: done")
