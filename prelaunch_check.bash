@@ -33,6 +33,9 @@ check_app() {
 }
 check4run() {
 
+  TEST_WS_DIR=$1
+  echo "$(hostname) TEST_WS_DIR=$TEST_WS_DIR" 
+
   \time sleep 1 >/dev/null 2>&1
   if [ $? -ne 0 ] ; then
     echo "$(hostname) : could not find time .. exit";
@@ -46,13 +49,13 @@ check4run() {
 
   #check if vcf2tiledb exists
   check_app $EXEC_NAME
-  if [$? -ne 0 ]; then
+  if [ $? -ne 0 ]; then
     echo "Error in checking $EXEC_NAME ... exit";
     return 1;
   fi
 
   check_app $EXEC_NAME_GT
-  if [$? -ne 0 ]; then
+  if [ $? -ne 0 ]; then
     echo "Error in checking $EXEC_NAME_GT ... exit";
     return 1;
   fi
@@ -88,7 +91,8 @@ check4run() {
   return 0
 }
 
-[[ $# -gt 1 ]] && TEST_WS_DIR=$1
-echo "$(hostname) TEST_WS_DIR=$TEST_WS_DIR" 
-check4run
+echo 
+echo "===== prelaunch_test $@"
+check4run $@
 [[ $? -eq 0 ]] && echo "$(hostname) : all good "
+echo 

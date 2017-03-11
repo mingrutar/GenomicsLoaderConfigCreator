@@ -47,7 +47,7 @@ def __proc_gen_result(geno_str) :
       ret['4'] = lines[11]
       return ret
     else:
-      print("INFO @%s: not GENOMICSDB_TIMER, ignored: " % (g_hostname, geno_str))
+      print("INFO @%s: ignore no GENOMICSDB_TIMER, %s..." % (g_hostname, geno_str[:80]))
       
 def startPidStats(run_cmd, fdlog ) :
   known_cmds = ['vcf2tiledb', 'gt_mpi_gather']
@@ -76,14 +76,14 @@ def measure_more( cmd, logfile ) :
     time.sleep(1)
     fdlog = open(logfile, 'w')
     pstat = startPidStats(','.join(cmd), fdlog)
-    print("**2* INFO @%s: executing command %s, pexec-pid=%s, pstat=%s" % (g_hostname, str(theExecCmd), pexec.pid, pstat.pid if pstat else 'no_stat'))
+    print("**EXEC INFO @%s: command %s, pexec-pid=%s, pstat=%s" % (g_hostname, str(theExecCmd), pexec.pid, pstat.pid if pstat else 'no_stat'))
     with pexec.stderr:
       qexec = deque(iter(pexec.stderr.readline, b''))
     rc = pexec.wait()
     fdlog.close()
     if pstat:
         pstat.kill()
-    print("**3* INFO @%s: #output=%d" % (g_hostname, len(qexec)) ) 
+    print("**OUT_EXEC INFO @%s: #output=%d" % (g_hostname, len(qexec)) ) 
     # last is of time
     timeline = qexec.pop().decode('utf-8').strip()
     time_result = dict(x.split(':') for x in timeline.split(','))
@@ -113,18 +113,16 @@ def save_time_log(db_path, run_id, cmd, time_output, genome_output, pidstat_cvs,
 
 def run_pre_test(working_dir, tiledb_root) :
   pre_test = os.path.join(working_dir, 'prelaunch_check.bash')
-  if os.path.isfile(pre_test) :
-    pid = Popen([pre_test, tiledb_root], stdout=PIPE, stderr=PIPE)
-    out, err = pid.communicate()
-    print(out)
-    return  pid.returncode == 0
-  else:
-    return None
+  assert(os.path.isfile(pre_test))
+  cmd = "%s %s" % (pre_test, tiledb_root)
+  proc = Popen([cmd], shell=True)
+  proc.wait()
+  return  proc.returncode == 0
 
 def get_command(run_id, db_path):
     ret = []
     stmt = queries['SELECT_RUN_CMD'] % (g_hostname, run_id)
-    print("INFO %s: run_pre_test stmt=%s" %(g_hostname, stmt))
+#    print("INFO %s: get_command stmt=%s" %(g_hostname, stmt))
     db_conn = sqlite3.connect(db_path)
     mycursor = db_conn.cursor()
     for row in mycursor.execute(stmt):
@@ -158,13 +156,18 @@ def pidstat2cvs(ifile, of_prefix) :
 if __name__ == '__main__' :
     rundef_id =int(sys.argv[1])
     working_dir = os.path.dirname(sys.argv[0])
+    if not working_dir:
+      working_dir = os.getcwd()
     db_path = os.path.join(working_dir, 'genomicsdb_loader.db')
     if not os.path.isfile(db_path) :
       print("INFO %s: not found %s, ...exit " % (g_hostname, db_path))
       exit()
 
-    cmd_list = get_command(rundef_id, db_path)        # 
+    cmd_list = get_command(rundef_id, db_path)        #
+    rcount = 1 
+    rtotal = len(cmd_list)
     for cmd, tiledb_ws, run_id in cmd_list:
+      print("++++START %s: %d/%d, rid=%s, tdb_ws=%s, cmd=%s" % (g_hostname,rcount,rtotal,run_id, tiledb_ws, cmd))
       rc = run_pre_test( working_dir, tiledb_ws )
       if rc:
         target_cmd = [ str(x.rstrip()) for x in cmd.split(' ') ]
@@ -182,3 +185,7 @@ if __name__ == '__main__' :
   #      print("INFO %s: cvsfiles= %s" % (g_hostname, str(cvsfiles) ))
         cvsfile = [ os.path.basename(x) for x in cvsfiles ]
         save_time_log(db_path, run_id, os.path.basename(cmd), time_nval, genome_time, cvsfiles, tiledb_ws)
+      else:
+        print("WARN %s, pre_test failed for id=%s" % (g_hostname, run_id))
+      print("++++END %s: %d/%d, rid=%s" % (g_hostname, rcount, rtotal, run_id))
+      rcount += 1
