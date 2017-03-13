@@ -18,11 +18,24 @@ PIDSTAT_INTERVAL = 2        #in sec
 DEVNULL = open(os.devnull, 'wb', 0)
 working_path = os.getcwd()
 g_hostname = platform.node().split('.')[0]
- 
+
+CURRENT_MPIRUN_PATH = "/usr/lib64/mpich/bin/mpirun"
+
+def check_MPIRUN(mpirun_path):
+  print("replacing %s with %s" %(mpirun_path, CURRENT_MPIRUN_PATH))
+  return CURRENT_MPIRUN_PATH
+  
 queries = { "SELECT_RUN_CMD" : "SELECT _id, full_cmd, tiledb_ws FROM run_log WHERE host_id like \"%s\" AND run_def_id=%d;",
    "INSERT_TIME" : "INSERT INTO time_result (run_id, target_comand, time_result, genome_result, partition_1_size, db_size, pidstat_path) \
  VALUES (%s, \"%s\", \"%s\", \"%s\", %s, \"%s\", \"%s\");" } 
 genome_profile_tags = {'fetch from vcf' : 'fv',
+    'combining cells' :'cc',
+    'flush output': 'fo',
+    'sections time' : 'st',
+    'time in single thread phase()' : 'ts',
+    'time in read_all()' : 'tr'}
+
+genome_prof_queryprofile_tags = {'fetch from vcf' : 'fv',
     'combining cells' :'cc',
     'flush output': 'fo',
     'sections time' : 'st',
@@ -35,7 +48,6 @@ def __proc_gen_result(geno_str) :
     if lines[0].strip().upper() == 'GENOMICSDB_TIMER':
       ret = {}
       op_str = lines[1].strip().lower()
-
       if op_str in genome_profile_tags:
         ret['op'] = genome_profile_tags[op_str]
       else:
@@ -48,29 +60,7 @@ def __proc_gen_result(geno_str) :
       ret['4'] = lines[11]
       return ret
     else:
-      print("INFO @%s: ignore no GENOMICSDB_TIMER, %s..." % (g_hostname, geno_str[:80]))
-
-genome_queryprof_tags = { 'GenomicsDB cell fill timer': 'cf',
-   'bcf_t serialization' : 'bs',
-   'Operator time' : 'ot', 
-   'Sweep at query begin position' : 'sq', 
-   'TileDB iterator' : 'ti', 
-   'Total scan_and_produce_Broad_GVCF time for rank 0' : 'tt', 
-   'TileDB to buffer cell' : 'tb', 
-   'bcf_t creation time' : 'bc' }
-def __proc_query_result(geno_str):
-    lines = geno_str.split(',')
-    if lines[0].strip().upper() == 'GENOMICSDB_TIMER':
-      ret = {}
-      op_str = lines[1].strip().lower()
-
-      if op_str in genome_queryprof_tags:
-        ret['op'] = genome_queryprof_tags[op_str]
-      else:
-        print('WARN @%s: operation string %s not found' % (g_hostname, op_str))
-        ret['op'] = op_str.replace(' ', '_')
-      for i in range(3, len(lines), 2):
-            ret[str((i-3)/2] = lines[i]
+      print("INFO @%s: ignore no GENOMICSDB_TIMER, %s..." % (g_hostname, geno_str[:120]))
       
 def startPidStats(run_cmd, fdlog ) :
   known_cmds = ['vcf2tiledb', 'gt_mpi_gather']
@@ -90,7 +80,7 @@ def startPidStats(run_cmd, fdlog ) :
     print('WARN @{}: did not find exec like {}'.format(g_hostname, ', '.join(known_cmds)))
   return pstat
 
-def measure_more( cmd, logfile, gen_result_func ) :
+def measure_more( cmd, logfile ) :
   time_lines_count = 6     # how many lines /usr/bin/time produces
   theExecCmd = ['/usr/bin/time', "-f", "0:%C,1:%e,2:%P,3:%F,4:%R,5:%w,6:%I,7:%O,8:%c,9:%x"] + cmd
   pexec = Popen(theExecCmd, shell=False, stdout=DEVNULL, stderr=PIPE)
@@ -115,7 +105,7 @@ def measure_more( cmd, logfile, gen_result_func ) :
     for i, gl in enumerate(qexec):
       line = gl.decode('utf-8').strip()
       if line:
-        gr = gen_result_func(line)
+        gr = __proc_gen_result(line)
         genome_result.append(gr)
       else:
         print("INFO @%s: empty line %i " % (g_hostname, i))
@@ -189,19 +179,18 @@ if __name__ == '__main__' :
     cmd_list = get_command(rundef_id, db_path)        #
     rcount = 1 
     rtotal = len(cmd_list)
-    gen_result_func = None
     for cmd, tiledb_ws, run_id in cmd_list:
       print("++++START %s: %d/%d, rid=%s, tdb_ws=%s, cmd=%s" % (g_hostname,rcount,rtotal,run_id, tiledb_ws, cmd))
       rc = run_pre_test( working_dir, tiledb_ws )
       if rc:
-        if not gen_result_func:
-          gen_result_func = __proc_gen_result if 'vcf2tiledb' in cmd else __proc_query_result
         target_cmd = [ str(x.rstrip()) for x in cmd.split(' ') ]
+        # patch for 
+        target_cmd[0] = check_MPIRUN(target_cmd[0])
         # print('target_cmd=%s' % target_cmd)
         log_fn = "%d-%d-%s_pid.log" % (rundef_id, run_id, g_hostname)
         log2path = os.path.join(working_dir, "logs", log_fn)
         print("INFO %s: pidstat.log=%s" % (g_hostname, log2path))
-        time_nval, genome_time = measure_more(target_cmd, log2path, gen_result_func)
+        time_nval, genome_time = measure_more(target_cmd, log2path)
 
         stat_path = os.path.join(working_dir, 'stats')
         if not os.path.isdir(stat_path) :

@@ -58,10 +58,11 @@ class TimeResultHandler(object):
     def __get_all_result(self, runid):
         assert runid
         if runid != self.__runid or not self.__runid:
-            results = self.data_handler.getAllResult(runid)
+            results, cmd = self.data_handler.getAllResult(runid)
             if results:
                 self.__all_results = results
                 self.__runid = runid
+                self.genome_data = self.gexec_loader if cmd in 'vcf2tiledb' else self.gexec_query
 
     time_row_labels =['Command', 'Wall Clock (sec)', 'CPU %','Major Page Fault', 'Minor Page Fault', 
          'File System Input', 'File System Output', 'Involunteer Context Switch', 'Volunteer Context Switch','Exit Code']
@@ -83,19 +84,29 @@ class TimeResultHandler(object):
         pddata = [ (row_labels[i], pd ) for i, pd in enumerate(data)]
         return pddata, col_header
 
-    genome_db_tags = {'fv' : 'Fetch from VCF',
-    'cc' : 'Combining Cells', 'fo' : 'Flush Output',
-    'st' : 'sections time', 'ts' : 'time in single thread phase()',
-    'tr' : 'time in read_all()'}
-    gtime_col_header = ['Wall-clock time(s)', 'Cpu time(s)', 'Critical path wall-clock time(s)', 
-            'Critical path Cpu time(s)', '#critical path']
+    gexec_loader = {'tags' : {'fv' : 'Fetch from VCF',
+                            'cc' : 'Combining Cells', 'fo' : 'Flush Output',
+                            'st' : 'sections time', 'ts' : 'time in single thread phase()',
+                            'tr' : 'time in read_all()'},
+            'header' : ['Wall-clock time(s)', 'Cpu time(s)', 'Critical path wall-clock time(s)', 
+                    'Critical path Cpu time(s)', '#critical path'] }
+    gexec_query = {'tags' : { 'cf': 'GenomicsDB cell fill timer',
+                                'bs' : 'bcf_t serialization',
+                                'ot' : 'Operator time', 
+                                'sq' : 'Sweep at query begin position', 
+                                'ti' : 'TileDB iterator', 
+                                'tt' : 'Total scan_and_produce_Broad_GVCF time for rank 0', 
+                                'tb' : 'TileDB to buffer cell', 
+                                'bc' : 'bcf_t creation time'  },
+            'header' : ['Cpu time(s)', 'Wall-clock time(s)'] }
+
     def __get_genome_result4run(self, gendata4run):
-        row_list = [0.0] * len(self.gtime_col_header)
+        row_list = [0.0] * len(self.genome_data['header'])
         for key, val in gendata4run.items():
             if key != 'op':
                 row_list[int(key)] = val
-        return self.genome_db_tags[gendata4run['op']], row_list
-                
+        return self.self.genome_data['tags'][gendata4run['op']], row_list
+
     def get_genome_results(self, runid, subidStr):
         ''' subidStr = LOAD_1,  LOAD_n '''
         self.__get_all_result(runid)

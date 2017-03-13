@@ -27,7 +27,7 @@ class RunVCFData(object):
         'User_Config_dict' : "SELECT name, config FROM loader_config_def where name in (%s);",
         'Time_Results' : 'SELECT tr.time_result, tr.genome_result, tr.pidstat_path, rl.lcname, rl.num_parallel FROM time_result tr, run_log rl where tr.run_id=rl._id and rl.run_def_id=%d order by rl._id desc;',
         'Runs_of_RunDef' : 'SELECT lcname, num_parallel, tiledb_ws, host_id, full_cmd FROM run_log where run_def_id=%d;',
-
+        'Get_Command' : 'SELECT target_comand from run_def wher _id = ?', 
 
         # for backwards compatibility only, add lcname. TODO remove when no longer needed        
         'SELECTALL_RUN_LOG' : 'SELECT * FROM run_log limit 1;',
@@ -125,11 +125,12 @@ class RunVCFData(object):
             mycursor.close()
         return ret
     
-    def getAllResult(self, runid):
-        assert runid
+    def getAllResult(self, runidstr):
+        assert runidstr
         mycursor =  self.db_conn.cursor()
         all_results = []
-        for row in mycursor.execute(self.queries['Time_Results'] % int(runid)):   #TODO, enumerate?
+        runid = int(runidstr)
+        for row in mycursor.execute(self.queries['Time_Results'] % runid):   #TODO, enumerate?
             rowresult = dict()
             rowresult['rtime'] = dict(eval(row[0]))
             rowresult['gtime'] = eval(row[1])
@@ -138,7 +139,8 @@ class RunVCFData(object):
             rowresult['n_parallel'] = row[4]
 
             all_results.append(rowresult)
-        return all_results
+        cmd = mycursor.execute(self.queries['Get_Command'], runid).fetchone()
+        return all_results, cmd
 
     def getExtraData(self, extra_data_key):
         return self.__extra_data[extra_data_key] if extra_data_key in  self.__extra_data else None
