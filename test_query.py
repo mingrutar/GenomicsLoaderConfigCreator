@@ -86,12 +86,8 @@ def prepareTest(test_def):
 def launch_query(host_run_list, q_def_run_id):
     for host, cmd_list in host_run_list.items():
         for cmd in cmd_list:
-            if dryrun :
-                shell_cmd = "ssh %s %s %s &" % (host, RUN_SCRIPT, q_def_run_id)
-                print('DRYRUN: os.system(%s)' % shell_cmd )
-            else :
-                print("launching test at %s, cmd= %s %s" % (host, RUN_SCRIPT, q_def_run_id))
-                os.system("ssh %s %s %s &" % (host, RUN_SCRIPT, q_def_run_id ))
+            print("launching test at %s, cmd= %s %s" % (host, RUN_SCRIPT, q_def_run_id))
+            os.system("ssh %s %s %s &" % (host, RUN_SCRIPT, q_def_run_id ))
     print("DONE launch... ")
 
 if __name__ == '__main__' :

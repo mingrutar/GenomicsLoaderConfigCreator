@@ -12,6 +12,12 @@ import time
 import os.path
 from datetime import datetime
 
+CURRENT_MPIRUN_PATH = "/usr/lib64/mpich/bin/mpirun"     # or /opt/openmpi/bin/mpirun
+
+def check_MPIRUN(mpirun_path):
+  print("replacing %s with %s" %(mpirun_path, CURRENT_MPIRUN_PATH))
+  return CURRENT_MPIRUN_PATH
+
 PIDSTAT_INTERVAL = 2        #in sec
 # no longer in use TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 
@@ -71,7 +77,8 @@ def __proc_query_result(geno_str):
         ret['op'] = op_str.replace(' ', '_')
       for i in range(3, len(lines), 2):
             ret[str((i-3)/2] = lines[i]
-      
+      return ret
+
 def startPidStats(run_cmd, fdlog ) :
   known_cmds = ['vcf2tiledb', 'gt_mpi_gather']
   exec_name = None
@@ -116,7 +123,8 @@ def measure_more( cmd, logfile, gen_result_func ) :
       line = gl.decode('utf-8').strip()
       if line:
         gr = gen_result_func(line)
-        genome_result.append(gr)
+        if gr:
+          genome_result.append(gr)
       else:
         print("INFO @%s: empty line %i " % (g_hostname, i))
     return time_result, genome_result
@@ -197,20 +205,25 @@ if __name__ == '__main__' :
         if not gen_result_func:
           gen_result_func = __proc_gen_result if 'vcf2tiledb' in cmd else __proc_query_result
         target_cmd = [ str(x.rstrip()) for x in cmd.split(' ') ]
+        target_cmd[0] = check_MPIRUN(target_cmd[0])
+
         # print('target_cmd=%s' % target_cmd)
         log_fn = "%d-%d-%s_pid.log" % (rundef_id, run_id, g_hostname)
         log2path = os.path.join(working_dir, "logs", log_fn)
         print("INFO %s: pidstat.log=%s" % (g_hostname, log2path))
         time_nval, genome_time = measure_more(target_cmd, log2path, gen_result_func)
-
-        stat_path = os.path.join(working_dir, 'stats')
-        if not os.path.isdir(stat_path) :
-          os.mkdir(stat_path)
-        cvs_prefix = os.path.join(stat_path, log_fn[:-4])
-        cvsfiles = pidstat2cvs(log2path, cvs_prefix)
-  #      print("INFO %s: cvsfiles= %s" % (g_hostname, str(cvsfiles) ))
-        cvsfile = [ os.path.basename(x) for x in cvsfiles ]
-        save_time_log(db_path, run_id, os.path.basename(cmd), time_nval, genome_time, cvsfiles, tiledb_ws)
+        if len(genome_time) > 0 :
+          print("INFO %s: Corrected genomics executable output. The exit status=%s" % (g_hostname, time_nval['9']) )
+          stat_path = os.path.join(working_dir, 'stats')
+          if not os.path.isdir(stat_path) :
+            os.mkdir(stat_path)
+          cvs_prefix = os.path.join(stat_path, log_fn[:-4])
+          cvsfiles = pidstat2cvs(log2path, cvs_prefix)
+    #      print("INFO %s: cvsfiles= %s" % (g_hostname, str(cvsfiles) ))
+          cvsfile = [ os.path.basename(x) for x in cvsfiles ]
+          save_time_log(db_path, run_id, os.path.basename(cmd), time_nval, genome_time, cvsfiles, tiledb_ws)
+        else:
+            print("WARN %s: No time measured for genomics executable, IGNORED. The exit status=%s" % (g_hostname, time_nval['9'] ))
       else:
         print("WARN %s, pre_test failed for id=%s" % (g_hostname, run_id))
       print("++++END %s: %d/%d, rid=%s" % (g_hostname, rcount, rtotal, run_id))
