@@ -4,7 +4,7 @@ import sys
 import os
 from pprint import pprint
 from collections import deque
-from subprocess import Popen, PIPE, check_output
+from subprocess import Popen, PIPE, check_output, CalledProcessError
 import json
 import platform
 import sqlite3
@@ -13,10 +13,6 @@ import os.path
 from datetime import datetime
 
 CURRENT_MPIRUN_PATH = "/usr/lib64/mpich/bin/mpirun"     # or /opt/openmpi/bin/mpirun
-
-def check_MPIRUN(mpirun_path):
-  print("replacing %s with %s" %(mpirun_path, CURRENT_MPIRUN_PATH))
-  return CURRENT_MPIRUN_PATH
 
 PIDSTAT_INTERVAL = 2        #in sec
 # no longer in use TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
@@ -76,7 +72,7 @@ def __proc_query_result(geno_str):
         print('WARN @%s: operation string %s not found' % (g_hostname, op_str))
         ret['op'] = op_str.replace(' ', '_')
       for i in range(3, len(lines), 2):
-            ret[str((i-3)/2] = lines[i]
+            ret[str((i-3)/2)] = lines[i]
       return ret
 
 def startPidStats(run_cmd, fdlog ) :
@@ -88,11 +84,14 @@ def startPidStats(run_cmd, fdlog ) :
       break
   pstat = None
   if exec_name :
-    pidlist = check_output(['/usr/bin/pgrep', exec_name])
-#    print("type(pidlist)={}, pidlist={}".format(type(pidlist), pidlist))
-    pidstr = pidlist.decode('utf-8').replace('\n', ',')
+    try:
+      pidlist = check_output(['/usr/bin/pgrep', exec_name])
+#     print("type(pidlist)={}, pidlist={}".format(type(pidlist), pidlist))
+      pidstr = pidlist.decode('utf-8').replace('\n', ',')
 #    print("INFO @{}: pid for {} are {}".format(g_hostname, exec_name, pidstr))
-    pstat = Popen(['/usr/bin/pidstat', '-hdIlruw', '1', '-p', pidstr ], stdout=fdlog, stderr=fdlog)
+      pstat = Popen(['/usr/bin/pidstat', '-hdIlruw', '1', '-p', pidstr ], stdout=fdlog, stderr=fdlog)
+    except CalledProcessError as cperr:
+      print("CalledProcessError error: {}".format(cperr))
   else:
     print('WARN @{}: did not find exec like {}'.format(g_hostname, ', '.join(known_cmds)))
   return pstat
@@ -157,7 +156,7 @@ def get_command(run_id, db_path):
     db_conn = sqlite3.connect(db_path)
     mycursor = db_conn.cursor()
     for row in mycursor.execute(stmt):
-      ret.append((row[1], row[2], row[0]))
+      ret.append((row[1], row[2], row[0]))    # full_cmd, tiledb_ws, _id
     db_conn.close()
     return ret
 
@@ -195,36 +194,44 @@ if __name__ == '__main__' :
       exit()
 
     cmd_list = get_command(rundef_id, db_path)        #
+    if not cmd_list:
+          print("ERROR %s: no command found for runid=%d" % (g_hostname, rundef_id))
+          exit()
+
+    isLoading = 'vcf2tiledb' in cmd_list[0][0]
+    gen_result_func = __proc_gen_result if  isLoading else __proc_query_result
     rcount = 1 
     rtotal = len(cmd_list)
-    gen_result_func = None
-    for cmd, tiledb_ws, run_id in cmd_list:
-      print("++++START %s: %d/%d, rid=%s, tdb_ws=%s, cmd=%s" % (g_hostname,rcount,rtotal,run_id, tiledb_ws, cmd))
-      rc = run_pre_test( working_dir, tiledb_ws )
-      if rc:
-        if not gen_result_func:
-          gen_result_func = __proc_gen_result if 'vcf2tiledb' in cmd else __proc_query_result
-        target_cmd = [ str(x.rstrip()) for x in cmd.split(' ') ]
-        target_cmd[0] = check_MPIRUN(target_cmd[0])
 
-        # print('target_cmd=%s' % target_cmd)
-        log_fn = "%d-%d-%s_pid.log" % (rundef_id, run_id, g_hostname)
-        log2path = os.path.join(working_dir, "logs", log_fn)
-        print("INFO %s: pidstat.log=%s" % (g_hostname, log2path))
-        time_nval, genome_time = measure_more(target_cmd, log2path, gen_result_func)
-        if len(genome_time) > 0 :
-          print("INFO %s: Corrected genomics executable output. The exit status=%s" % (g_hostname, time_nval['9']) )
-          stat_path = os.path.join(working_dir, 'stats')
-          if not os.path.isdir(stat_path) :
-            os.mkdir(stat_path)
-          cvs_prefix = os.path.join(stat_path, log_fn[:-4])
-          cvsfiles = pidstat2cvs(log2path, cvs_prefix)
-    #      print("INFO %s: cvsfiles= %s" % (g_hostname, str(cvsfiles) ))
-          cvsfile = [ os.path.basename(x) for x in cvsfiles ]
-          save_time_log(db_path, run_id, os.path.basename(cmd), time_nval, genome_time, cvsfiles, tiledb_ws)
-        else:
-            print("WARN %s: No time measured for genomics executable, IGNORED. The exit status=%s" % (g_hostname, time_nval['9'] ))
+    for cmd, tiledb_ws, run_id in cmd_list:
+      if isLoading:
+        rc = run_pre_test(working_dir, tiledb_ws)
+        if not rc:
+          print("WARN %s: pretest failed with with runid=%s, cmd=%s, tiledb_ws=%s, continue to next" % (g_hostname,run_id, cmd, tiledb_ws))
+          continue
       else:
-        print("WARN %s, pre_test failed for id=%s" % (g_hostname, run_id))
+        cmd = "%s -l %s" % (cmd, os.path.join(working_dir, 'loader_config.json'))       #TODO: for now
+      print("++++START %s: %d/%d, rid=%s, tdb_ws=%s, cmd=%s" % (g_hostname,rcount,rtotal,run_id, tiledb_ws, cmd))
+      target_cmd = [ str(x.rstrip()) for x in cmd.split(' ') ]
+      if os.path.basename(target_cmd[0]) == 'mpirun':
+        target_cmd[0] = CURRENT_MPIRUN_PATH
+
+      # print('target_cmd=%s' % target_cmd)
+      log_fn = "%d-%d-%s_pid.log" % (rundef_id, run_id, g_hostname)
+      log2path = os.path.join(working_dir, "logs", log_fn)
+      print("INFO %s: pidstat.log=%s" % (g_hostname, log2path))
+      time_nval, genome_time = measure_more(target_cmd, log2path, gen_result_func)
+      if len(genome_time) > 0 :
+        print("INFO %s: Corrected genomics executable output. The exit status=%s" % (g_hostname, time_nval['9']) )
+        stat_path = os.path.join(working_dir, 'stats')
+        if not os.path.isdir(stat_path) :
+          os.mkdir(stat_path)
+        cvs_prefix = os.path.join(stat_path, log_fn[:-4])
+        cvsfiles = pidstat2cvs(log2path, cvs_prefix)
+  #      print("INFO %s: cvsfiles= %s" % (g_hostname, str(cvsfiles) ))
+        cvsfile = [ os.path.basename(x) for x in cvsfiles ]
+        save_time_log(db_path, run_id, os.path.basename(cmd), time_nval, genome_time, cvsfiles, tiledb_ws)
+      else:
+          print("WARN %s: No time measured for genomics executable, IGNORED. The exit status=%s" % (g_hostname, time_nval['9'] ))
       print("++++END %s: %d/%d, rid=%s" % (g_hostname, rcount, rtotal, run_id))
       rcount += 1

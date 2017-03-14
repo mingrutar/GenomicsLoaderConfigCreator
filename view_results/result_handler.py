@@ -27,6 +27,8 @@ class TimeResultHandler(object):
                 self.data_handler.close() 
             self.data_handler = core_data.RunVCFData(dbpath) 
             print("INFO found genomicd loader db at %s" % dbpath )
+        else:
+            raise ValueError('No db @ %s' % result_path)
 
     def __transform4Pandas(self, inputRows) :
         ''' inputRows = [ ]
@@ -196,9 +198,9 @@ if __name__ == '__main__':
     print("mypath=%s" % mypath)
     resultData = TimeResultHandler(mypath)
 
-    run_dir = "run_mpi" 
+    run_dir = "vcf2tiledb-data" 
     resultData.setResultPath(run_dir)
-    runid = 6
+    runid = 8
     csv_file = resultData.export2csv(run_dir, runid)
     print("csv file @ %s" % csv_file)
 

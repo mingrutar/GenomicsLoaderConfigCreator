@@ -77,7 +77,7 @@ def prepareTest(test_def):
                     cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
                     if run['num_proc'] > 1:
                         cmd = "mpirun -np %d %s" % (run['num_proc'], cmd)
-                    data_handler.addRunLog(q_def_run_id, host, cmd, run['tdb_ws'],  run['num_proc'])
+                    data_handler.addRunLog(q_def_run_id, host, cmd, run['tdb_ws'], run['lc_name'], run['num_proc'])
                     hosts[host].append(cmd)
     data_handler.close()
     print("INFO: Generated %d query json @ %s" % (file_count, query_ws_path))
@@ -108,3 +108,5 @@ if __name__ == '__main__' :
             print("DONE Launch... ")
         else:
             print("DRYRUN: done")
+    else:
+        print('cannot find query definition file %s' % query_config)
