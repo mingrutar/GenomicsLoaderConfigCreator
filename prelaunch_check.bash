@@ -8,7 +8,6 @@ CLEAN_CACHES="/tools/utilities/bin/clear_caches.sh"
 EXEC_NAME="$HOME/cppProjects/GenomicsDB/bin/vcf2tiledb"
 EXEC_NAME_GT="$HOME/cppProjects/GenomicsDB/bin/gt_mpi_gather"
 
-INIT_TILEDB="$HOME/cppProjects/GenomicsDB/bin/create_tiledb_workspace"
 #MPIRUN="/usr/lib64/mpich/bin/mpirun"
 MPIRUN="/opt/openmpi/bin/mpirun"
 
@@ -31,11 +30,8 @@ check_app() {
   fi   
   return 0 
 }
+
 check4run() {
-
-  TEST_WS_DIR=$1
-  echo "$(hostname) TEST_WS_DIR=$TEST_WS_DIR" 
-
   \time sleep 1 >/dev/null 2>&1
   if [ $? -ne 0 ] ; then
     echo "$(hostname) : could not find time .. exit";
@@ -67,20 +63,6 @@ check4run() {
   else
      echo "$(hostname) sudo $CLEAN_CACHES worked ok"
   fi
-
-  if [ -d $TEST_WS_DIR ] ; then
-     [[ -f $TEST_WS_DIR/__tiledb_workspace.tdb ]] ||  touch $TEST_WS_DIR/__tiledb_workspace.tdb
-     [[ -f $TEST_WS_DIR/__tiledb_group.tdb ]] ||  touch $TEST_WS_DIR/__tiledb_group.tdb
-     rm -rf $TEST_WS_DIR/TEST*
-     echo "removed old TEST* from tiledb workspace $TEST_WS_DIR" 
-  else
-    mkdir -p $TEST_WS_DIR
-    $INIT_TILEDB $TEST_WS_DIR
-    $(dirname $EXEC_NAME)/create_tiledb_workspace $TEST_WS_DIR
-    echo "created tiledb workspace $TEST_WS_DIR" 
-  fi
-  echo "Output of df -h $TEST_WS_DIR :"
-  df -h $TEST_WS_DIR
 
   #check mpirun
   if ! [  -x "$(command -v $MPIRUN)" ]; then

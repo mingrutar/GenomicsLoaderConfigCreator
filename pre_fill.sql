@@ -88,17 +88,9 @@ VALUES ("do_ping_pong_buffering", 'Boolean', "false", 'pb', 1);
 
 -- for query_config_tag, not in use yet --
 INSERT INTO query_config_tag (name, type, default_value) 
-VALUES ("reference_genome", 'Template', "ref_genome");
+VALUES ("segment_size", 'MB', 10);
 INSERT INTO query_config_tag (name, type, default_value) 
-VALUES ("workspace", "getLoaderWorkSpace()", "column_partitions");
+VALUES ("num_position", "Number", 0);
 INSERT INTO query_config_tag (name, type, default_value) 
-VALUES ("array", "getLoaderArrayNames()", 1);
-INSERT INTO query_config_tag (name, type, default_value) 
-VALUES ("scan_full", "Boolean", "true");
-INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
-VALUES ("segment_size", 'MB', "10", 'sg', 1);
-INSERT INTO loader_config_tag (name, type, default_value) 
-VALUES ("vid_mapping_file", 'Template', "vid");
-INSERT INTO loader_config_tag (name, type, default_value) 
-VALUES ("callset_mapping_file", 'Template', "callsets");
+VALUES ("pick_method", "String", 'all');
 

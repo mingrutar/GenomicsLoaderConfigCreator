@@ -23,6 +23,19 @@ RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
 working_dir = os.environ.get('WS_HOME', os.getcwd())
 query_ws_path = os.path.join(working_dir, 'ws_test_query')
 
+# change as needed
+def __make_string_of_args(npq_params):
+    if 'query_column_ranges' in npq_params:
+        npq_params['num_columns'] = len(npq_params['query_column_ranges'][0])
+        npq_params.pop('query_column_ranges', None)
+    npq_params.pop("vid_mapping_file", None)
+    npq_params.pop("reference_genome", None)  
+    npq_params.pop("callset_mapping_file", None)
+    npq_params.pop('array', None)
+    npq_params.pop('workspace', None)
+    npq_params.pop('query_attributes', None)
+    return str(npq_params)
+
 # for our test
 def prepareTest(test_def):
     db_path = os.path.join(working_dir, test_def['source_db_path'])
@@ -49,7 +62,10 @@ def prepareTest(test_def):
     hosts={}
     file_count = 0    
     for batch in test_def['test_batch']:
-        run_info_list = data_handler.getRunsInfo(batch['run_id'])   # get loader info
+        if  'lcname' in test_def:
+            run_info_list = data_handler.getTheseRunsInfo(batch['run_id'], test_def['lcname'])   # get loader info
+        else:
+            run_info_list = data_handler.getRunsInfo(batch['run_id'])   # get loader info
         for run in run_info_list:
             host = run['host']
             # host_ws_dir = os.path.join(query_ws_path, host)
@@ -66,19 +82,35 @@ def prepareTest(test_def):
             for seg_size in test_def['segment_size']:
                 npq_params = deepcopy(tq_params)
                 npq_params['segment_size'] = seg_size
-                for dist_name, num_pos in PosSelection.items():
-                    selected_pos =[ hm.getPositions(dist_name, num_pos, bin_pos_list[ix]) for ix in range(run['num_proc']) ]
-                    pos_list = list(chain.from_iterable(selected_pos))
-                    npq_params['query_column_ranges'] = [ pos_list ]
-                    query_fn = os.path.join(query_ws_path, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, dist_name))
+                npq_params['scan_all'] = test_def["pick_mode"] == 'all' 
+                if test_def["pick_mode"] != 'all':
+                    for dist_name, num_pos in PosSelection.items():
+                        selected_pos =[ hm.getPositions(dist_name, num_pos, bin_pos_list[ix]) for ix in range(run['num_proc']) ]
+                        pos_list = list(chain.from_iterable(selected_pos))
+                        npq_params['query_column_ranges'] = [ pos_list ]
+                        query_fn = os.path.join(query_ws_path, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, dist_name))
+                        with open(query_fn, 'w') as wfd:
+                            json.dump(npq_params, wfd)
+                        file_count += 1
+                        cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
+                        if run['num_proc'] > 1:
+                            cmd = "mpirun -np %d %s" % (run['num_proc'], cmd)
+                        npq_params['pick_mode'] = dist_name
+                        query_arg = __make_string_of_args(npq_params)
+                        data_handler.addRunLog(q_def_run_id, host, cmd, run['tdb_ws'], run['lc_name'], run['num_proc'], query_arg)
+                        hosts[host].append(cmd)
+                else:
+                    query_fn = os.path.join(query_ws_path, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, 'all'))
                     with open(query_fn, 'w') as wfd:
                         json.dump(npq_params, wfd)
                     file_count += 1
                     cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
                     if run['num_proc'] > 1:
                         cmd = "mpirun -np %d %s" % (run['num_proc'], cmd)
-                    data_handler.addRunLog(q_def_run_id, host, cmd, run['tdb_ws'], run['lc_name'], run['num_proc'])
+                    query_arg = __make_string_of_args(npq_params)
+                    data_handler.addRunLog(q_def_run_id, host, cmd, run['tdb_ws'], run['lc_name'], run['num_proc'], query_arg)
                     hosts[host].append(cmd)
+                    
     data_handler.close()
     print("INFO: Generated %d query json @ %s" % (file_count, query_ws_path))
     return hosts, q_def_run_id

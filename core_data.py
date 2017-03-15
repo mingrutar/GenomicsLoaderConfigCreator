@@ -18,7 +18,7 @@ class RunVCFData(object):
 
         'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config, creation_ts) VALUES (\"%s\", \"%s\", %d);",
         'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, target_comand, creation_ts) VALUES (\"%s\", \"%s\", %d);',
-        'INSERT_RUN_LOG' : 'INSERT INTO run_log (run_def_id, num_parallel, full_cmd, tiledb_ws, host_id, lcname, creation_ts) VALUES (%d,%d,\"%s\",\"%s\",\"%s\",\"%s\", %d);',
+        'INSERT_RUN_LOG' : 'INSERT INTO run_log (run_def_id, num_parallel, full_cmd, tiledb_ws, host_id, lcname, profiler, creation_ts) VALUES (%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%d);',
         'INSERT_QUERY_RUN_DEF' : 'INSERT INTO run_def (run_loader_id, target_comand, creation_ts) VALUES (%d, \"%s\", %d);',
 
         'Run_Config' : 'SELECT loader_configs, _id FROM run_def WHERE _id=%d;',
@@ -30,6 +30,7 @@ class RunVCFData(object):
         'Get_Command' : 'SELECT target_comand from run_def WHERE _id = %d', 
         'Run_ConfigNames' : 'SELECT lcname from run_log WHERE run_def_id = %d',
         'Last_Run_Def' : 'SELECT _id FROM run_def ORDER BY _id DESC LIMIT 1',
+        'Get_LoaderRunId' : 'SELECT loader_configs from run_def WHERE _id = %d',
 
         # for backwards compatibility only, add lcname. TODO remove when no longer needed        
         'SELECTALL_RUN_LOG' : 'SELECT * FROM run_log limit 1;',
@@ -80,6 +81,16 @@ class RunVCFData(object):
             run_info.append(dict({'lc_name': row[0], 'num_proc': row[1], 'tdb_ws':row[2],'host':row[3],'loader_config':row[4].split()[-1] }))
         return run_info
 
+    def getTheseRunsInfo(self, runid, loader_list):
+        assert(runid)
+        mycursor = self.db_conn.cursor()
+        query = self.queries["Runs_of_RunDef"] % runid
+        run_info = []
+        for row in mycursor.execute(query):
+            if row[0] in loader_list:
+                run_info.append(dict({'lc_name': row[0], 'num_proc': row[1], 'tdb_ws':row[2],'host':row[3],'loader_config':row[4].split()[-1] }))
+        return run_info
+
     def getRunConfigs(self, runid, bFillFlag=True):
         ''' fillFlag = 0 => no fill, = 1 => fill with '-'; = 2 => fill with default_value '''
         mycursor = self.db_conn.cursor()
@@ -105,16 +116,25 @@ class RunVCFData(object):
             return None, None
     def getLastRun():
         mycursor = self.db_conn.cursor()
-        for row in mycursor.execute(queries['Last_Run_Def']):
-            last_run_def_id = row[0]
-        return last_run_def_id
+        last_run_def_id = mycursor.execute(self.queries['Last_Run_Def']).fetchone()
+        return last_run_def_id[0]
 
-    def getRunConfigsDict(self, runid, bFillFlag=True):
+    def getRunCommand(self, runid):
+        mycursor = self.db_conn.cursor()
+        cmd = mycursor.execute(self.queries['Get_Command'] % runid).fetchone()
+        return cmd[0]
+
+    def getLoadRunId(self, runid):
+        mycursor = self.db_conn.cursor()
+        runid = mycursor.execute(self.queries['Get_LoaderRunId'] % runid).fetchone()
+        return list(eval(runid[0]))
+
+    def getRunConfigsDict(self, myrunid, bFillFlag=True):
         ''' fillFlag = 0 => no fill, = 1 => fill with '-'; = 2 => fill with default_value '''
+        assert(myrunid)
         mycursor = self.db_conn.cursor()
         definable_tags = self.getUserDefinableConfigTags(mycursor)
 
-        myrunid = runid if runid else self.getLastRun();
         cfg_names = self.getRunConfigNames2(myrunid, mycursor)
         if cfg_names:
             query = self.queries['User_Config_dict'] % ",".join( [ "\"%s\"" % x for x in cfg_names ] )
@@ -129,9 +149,9 @@ class RunVCFData(object):
                             cfg[key] = str(val[2])
                         else:
                             cfg[key] = "%s*" % cfg[key]
-            return myrunid, lc_items
+            return lc_items
         else:
-            return None, None
+            return None
     ''' TODO remove
     def getRunConfigNames(self, runid=None, cursor=None):
         return the loader config list for a run, last run if runid is None 
@@ -282,9 +302,9 @@ class RunVCFData(object):
         mycursor.close()
         return run_id
 
-    def addRunLog(self, rundef_id, host, cmd, tiledb_ws, loader_cfg, num_parallel=1):
+    def addRunLog(self, rundef_id, host, cmd, tiledb_ws, loader_cfg, num_parallel=1, query_params=""):
         mycursor = self.db_conn.cursor()
-        stmt = self.queries['INSERT_RUN_LOG'] % (rundef_id, num_parallel, cmd, tiledb_ws, host, loader_cfg, int(time.time()) )
+        stmt = self.queries['INSERT_RUN_LOG'] % (rundef_id, num_parallel, cmd, tiledb_ws, host, loader_cfg, query_params, int(time.time()) )
         mycursor.execute(stmt)
         run_id = mycursor.lastrowid
         self.db_conn.commit()

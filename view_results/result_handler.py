@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import os, os.path
 import sys
+import collections
 
 class TimeResultHandler(object):
     def __init__(self, wkspace=None ):
@@ -137,10 +138,14 @@ class TimeResultHandler(object):
 
     def write_csv_labels(self, csv_fd, confgiList):
         ldname =  next (iter (confgiList.values()))
+
         lc_labels = [ k for k in ldname.keys() ]
         rtime = self.__all_results[0]['rtime']      # name:val
-        rtime_labels = [ self.time_row_labels[int(x)] for x in rtime.keys() ]
-        
+        rtime_labels = [''] * len(rtime)
+        for k,v in rtime.items():
+            idx = int(k)
+            rtime_labels[idx] = self.time_row_labels[idx]
+
         gtime_labels = []
         gtimes = self.__all_results[0]['gtime']      #  30 labels num_ops x num(gtime_col_header)
         num_op = len(self.genome_data['tags'])
@@ -157,19 +162,34 @@ class TimeResultHandler(object):
                 return
 
     def export2csv(self, run_dir, runid=None):
-        my_runid, configDict = self.data_handler.getRunConfigsDict(runid) 
-        assert(my_runid != None and len(configDict) > 0)
+        if not runid:
+            runid = self.data_handler.getLastRun()
+        cmd = self.data_handler.getRunCommand(runid)
+        if 'vcf2tiledb' in cmd:
+            loader_run_id = runid
+        else:
+            loader_run_id = self.data_handler.getLoadRunId(runid)[0]
+        configDict = {}
+        for lcname, cfg in self.data_handler.getRunConfigsDict(loader_run_id).items():
+            sorted_cfg = collections.OrderedDict( sorted(cfg.items(), key = lambda k : k[0]))   # sorted by key
+            configDict[lcname] = sorted_cfg
+
+        my_runid = runid
+        assert(my_runid != None and configDict)
+
         print("INFO export test run %d to csv..." % my_runid)
 
         self.__get_all_result(my_runid)
-        filename = os.path.join(self.__wspace, "csvfiles", "%s_%s.csv" % (run_dir, my_runid))
+        filename = os.path.join(self.__wspace, "csvfiles", "%s_%s-%s.csv" % (run_dir, my_runid, os.path.basename(cmd)))
         csv_fd = open(filename, 'w')
         self.write_csv_labels(csv_fd, configDict)
 
         for row in self.__all_results:
             lc_data = [ v for v in configDict[row['lcname']].values() ]
             rtime = row['rtime']      # name:val
-            rtime_data = [ v for v in rtime.values() ]
+            rtime_data = [''] * len(rtime)
+            for k,v in rtime.items():
+                rtime_data[int(k)] = v
             perproc_count = 0
             num_op = len(self.genome_data['tags'])
             gtime_data = []

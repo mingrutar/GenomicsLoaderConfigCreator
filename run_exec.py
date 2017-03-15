@@ -141,8 +141,9 @@ def save_time_log(db_path, run_id, cmd, time_output, genome_output, pidstat_cvs,
     db_conn.commit()
     db_conn.close()
 
-def run_pre_test(working_dir, tiledb_root) :
-  pre_test = os.path.join(working_dir, 'prelaunch_check.bash')
+def run_pre_test(working_dir, tiledb_root, isLoading) :
+  script = 'precheck_tdb_ws.bash' if isLoading else 'prelaunch_check.bash'
+  pre_test = os.path.join(working_dir, script)
   assert(os.path.isfile(pre_test))
   cmd = "%s %s" % (pre_test, tiledb_root)
   proc = Popen([cmd], shell=True)
@@ -204,12 +205,11 @@ if __name__ == '__main__' :
     rtotal = len(cmd_list)
 
     for cmd, tiledb_ws, run_id in cmd_list:
-      if isLoading:
-        rc = run_pre_test(working_dir, tiledb_ws)
-        if not rc:
-          print("WARN %s: pretest failed with with runid=%s, cmd=%s, tiledb_ws=%s, continue to next" % (g_hostname,run_id, cmd, tiledb_ws))
+      rc = run_pre_test(working_dir, tiledb_ws, isLoading)
+      if not rc:
+        print("WARN %s: pretest failed with with runid=%s, cmd=%s, tiledb_ws=%s, continue to next" % (g_hostname,run_id, cmd, tiledb_ws))
           continue
-      else:
+      if not isLoading:    #TODO: temporary add loader file
         cmd = "%s -l %s" % (cmd, os.path.join(working_dir, 'loader_config.json'))       #TODO: for now
       print("++++START %s: %d/%d, rid=%s, tdb_ws=%s, cmd=%s" % (g_hostname,rcount,rtotal,run_id, tiledb_ws, cmd))
       target_cmd = [ str(x.rstrip()) for x in cmd.split(' ') ]
