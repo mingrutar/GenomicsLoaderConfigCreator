@@ -15,7 +15,6 @@ class TimeResultHandler(object):
     def __init__(self, wkspace=None ):
         self.__wspace = wkspace if wkspace else os.getcwd()
         self.__runid = None
-        self.setResultPath(".")
     
     def setResultPath(self, result_path):
         self.__source = os.path.join(self.__wspace, result_path)
@@ -64,7 +63,7 @@ class TimeResultHandler(object):
             if results:
                 self.__all_results = results
                 self.__runid = runid
-                self.genome_data = self.gexec_loader if cmd in 'vcf2tiledb' else self.gexec_query
+                self.genome_data = self.gexec_loader if 'vcf2tiledb' in cmd else self.gexec_query
 
     time_row_labels =['Command', 'Wall Clock (sec)', 'CPU %','Major Page Fault', 'Minor Page Fault', 
          'File System Input', 'File System Output', 'Involunteer Context Switch', 'Volunteer Context Switch','Exit Code']
@@ -106,8 +105,14 @@ class TimeResultHandler(object):
         row_list = [0.0] * len(self.genome_data['header'])
         for key, val in gendata4run.items():
             if key != 'op':
-                row_list[int(key)] = val
-        return self.self.genome_data['tags'][gendata4run['op']], row_list
+                if '.' in key:
+                    row_list[int(float(key))] = val          # patch a mistake @ generator
+                else:
+                    row_list[int(key)] = val
+        if gendata4run['op'] in self.genome_data['tags']:
+            return self.genome_data['tags'][gendata4run['op']], row_list
+        else:
+            return gendata4run['op'], row_list
 
     def get_genome_results(self, runid, subidStr):
         ''' subidStr = LOAD_1,  LOAD_n '''
@@ -117,7 +122,7 @@ class TimeResultHandler(object):
         rows = []
         for gtimes in self.__all_results[subid]['gtime'] :      # list
             rows.append(self.__get_genome_result4run(gtimes))
-        return rows, self.gtime_col_header
+        return rows, self.genome_data['header']
 
     def get_pidstats(self, runid):
         self.__get_all_result(runid)
@@ -138,11 +143,11 @@ class TimeResultHandler(object):
         
         gtime_labels = []
         gtimes = self.__all_results[0]['gtime']      #  30 labels num_ops x num(gtime_col_header)
-        num_op = len(self.genome_db_tags)
+        num_op = len(self.genome_data['tags'])
         perproc_count = 0
         for gt_item in gtimes:
             opname, gdata = self.__get_genome_result4run(gt_item)
-            gt_op_labels = [ "%s_%s" % (opname, hname) for hname in self.gtime_col_header ]
+            gt_op_labels = [ "%s_%s" % (opname, hname) for hname in self.genome_data['header'] ]
             gtime_labels.extend(gt_op_labels)
             perproc_count += 1
             if perproc_count % num_op == 0:
@@ -166,7 +171,7 @@ class TimeResultHandler(object):
             rtime = row['rtime']      # name:val
             rtime_data = [ v for v in rtime.values() ]
             perproc_count = 0
-            num_op = len(self.genome_db_tags)
+            num_op = len(self.genome_data['tags'])
             gtime_data = []
             for gtime in row['gtime']:      # list
                 opname, gdata = self.__get_genome_result4run(gtime)
@@ -200,7 +205,7 @@ if __name__ == '__main__':
 
     run_dir = "vcf2tiledb-data" 
     resultData.setResultPath(run_dir)
-    runid = 8
+    runid = 10
     csv_file = resultData.export2csv(run_dir, runid)
     print("csv file @ %s" % csv_file)
 

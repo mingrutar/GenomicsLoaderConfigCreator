@@ -52,13 +52,13 @@ def __proc_gen_result(geno_str) :
     else:
       print("INFO @%s: ignore no GENOMICSDB_TIMER, %s..." % (g_hostname, geno_str[:80]))
 
-genome_queryprof_tags = { 'GenomicsDB cell fill timer': 'cf',
+genome_queryprof_tags = { 'genomicsdb cell fill timer': 'cf',
    'bcf_t serialization' : 'bs',
-   'Operator time' : 'ot', 
-   'Sweep at query begin position' : 'sq', 
-   'TileDB iterator' : 'ti', 
-   'Total scan_and_produce_Broad_GVCF time for rank 0' : 'tt', 
-   'TileDB to buffer cell' : 'tb', 
+   'operator time' : 'ot', 
+   'sweep at query begin position' : 'sq', 
+   'tiledb iterator' : 'ti', 
+   'total scan_and_produce_broad_gvcf time for rank 0' : 'tt', 
+   'tiledb to buffer cell' : 'tb', 
    'bcf_t creation time' : 'bc' }
 def __proc_query_result(geno_str):
     lines = geno_str.split(',')
