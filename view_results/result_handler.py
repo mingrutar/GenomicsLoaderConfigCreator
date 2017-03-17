@@ -103,11 +103,14 @@ class TimeResultHandler(object):
             'header' : ['Cpu time(s)', 'Wall-clock time(s)'] }
 
     def __get_genome_result4run(self, gendata4run):
-        row_list = [0.0] * len(self.genome_data['header'])
+        ll = len(gendata4run)
+        row_list = [''] * ll
         for key, val in gendata4run.items():
             if key != 'op':
                 if '.' in key:
-                    row_list[int(float(key))] = val          # patch a mistake @ generator
+                    idx = int(float(key))
+                    if idx < ll:
+                        row_list[idx] = val          # patch a mistake @ generator
                 else:
                     row_list[int(key)] = val
         if gendata4run['op'] in self.genome_data['tags']:
@@ -223,9 +226,9 @@ if __name__ == '__main__':
     print("mypath=%s" % mypath)
     resultData = TimeResultHandler(mypath)
 
-    run_dir = "vcf2tiledb-data" 
+    run_dir = os.path.join("vcf2tiledb-data", "VDA413")
     resultData.setResultPath(run_dir)
-    runid = 10
+    runid = 13
     csv_file = resultData.export2csv(run_dir, runid)
     print("csv file @ %s" % csv_file)
 
