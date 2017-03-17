@@ -82,7 +82,7 @@ def prepareTest(test_def):
             for seg_size in test_def['segment_size']:
                 npq_params = deepcopy(tq_params)
                 npq_params['segment_size'] = seg_size
-                npq_params['scan_all'] = test_def["pick_mode"] == 'all' 
+                npq_params["scan_full"] = test_def["pick_mode"] == 'all' 
                 if test_def["pick_mode"] != 'all':
                     for dist_name, num_pos in PosSelection.items():
                         selected_pos =[ hm.getPositions(dist_name, num_pos, bin_pos_list[ix]) for ix in range(run['num_proc']) ]

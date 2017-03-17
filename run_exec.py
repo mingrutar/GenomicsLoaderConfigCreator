@@ -22,7 +22,8 @@ working_path = os.getcwd()
 g_hostname = platform.node().split('.')[0]
  
 queries = { "SELECT_RUN_CMD" : "SELECT _id, full_cmd, tiledb_ws FROM run_log WHERE host_id like \"%s\" AND run_def_id=%d;",
-   "INSERT_TIME" : "INSERT INTO time_result (run_id, target_comand, time_result, genome_result, partition_1_size, db_size, pidstat_path) \
+    "SELECT_RUN_CMD2" : "SELECT _id, full_cmd, tiledb_ws FROM run_log WHERE host_id like \"%s\" AND _id=%d;",
+    "INSERT_TIME" : "INSERT INTO time_result (run_id, target_comand, time_result, genome_result, partition_1_size, db_size, pidstat_path) \
  VALUES (%s, \"%s\", \"%s\", \"%s\", %s, \"%s\", \"%s\");" } 
 genome_profile_tags = {'fetch from vcf' : 'fv',
     'combining cells' :'cc',
@@ -71,8 +72,9 @@ def __proc_query_result(geno_str):
       else:
         print('WARN @%s: operation string %s not found' % (g_hostname, op_str))
         ret['op'] = op_str.replace(' ', '_')
-      for i in range(3, len(lines), 2):
-            ret[str((i-3)/2)] = lines[i]
+
+      ret['0'] = lines[3]    #wall clock
+      ret['1'] = lines[5]    #CPU time 
       return ret
 
 def startPidStats(run_cmd, fdlog ) :
@@ -150,9 +152,9 @@ def run_pre_test(working_dir, tiledb_root, isLoading) :
   proc.wait()
   return  proc.returncode == 0
 
-def get_command(run_id, db_path):
+def get_command(run_def_id, db_path, run_id):
     ret = []
-    stmt = queries['SELECT_RUN_CMD'] % (g_hostname, run_id)
+    stmt = queries['SELECT_RUN_CMD2'] % (g_hostname, run_id) if run_id else queries['SELECT_RUN_CMD'] % (g_hostname, run_def_id)
 #    print("INFO %s: get_command stmt=%s" %(g_hostname, stmt))
     db_conn = sqlite3.connect(db_path)
     mycursor = db_conn.cursor()
@@ -185,7 +187,9 @@ def pidstat2cvs(ifile, of_prefix) :
     return cvs_pids
 
 if __name__ == '__main__' :
+    assert(len(sys.argv)>1)
     rundef_id =int(sys.argv[1])
+    runid = int(sys.argv[2]) if len(sys.argv) > 2 else None
     working_dir = os.path.dirname(sys.argv[0])
     if not working_dir:
       working_dir = os.getcwd()
@@ -194,7 +198,7 @@ if __name__ == '__main__' :
       print("INFO %s: not found %s, ...exit " % (g_hostname, db_path))
       exit()
 
-    cmd_list = get_command(rundef_id, db_path)        #
+    cmd_list = get_command(rundef_id, db_path, runid)        #
     if not cmd_list:
           print("ERROR %s: no command found for runid=%d" % (g_hostname, rundef_id))
           exit()
@@ -208,9 +212,9 @@ if __name__ == '__main__' :
       rc = run_pre_test(working_dir, tiledb_ws, isLoading)
       if not rc:
         print("WARN %s: pretest failed with with runid=%s, cmd=%s, tiledb_ws=%s, continue to next" % (g_hostname,run_id, cmd, tiledb_ws))
-          continue
-      if not isLoading:    #TODO: temporary add loader file
-        cmd = "%s -l %s" % (cmd, os.path.join(working_dir, 'loader_config.json'))       #TODO: for now
+        continue
+# no longer needed     if not isLoading:    #TODO: temporary add loader file
+#        cmd = "%s -l %s" % (cmd, os.path.join(working_dir, 'loader_config.json'))   
       print("++++START %s: %d/%d, rid=%s, tdb_ws=%s, cmd=%s" % (g_hostname,rcount,rtotal,run_id, tiledb_ws, cmd))
       target_cmd = [ str(x.rstrip()) for x in cmd.split(' ') ]
       if os.path.basename(target_cmd[0]) == 'mpirun':
