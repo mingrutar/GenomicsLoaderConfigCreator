@@ -12,7 +12,8 @@ import time
 import os.path
 from datetime import datetime
 
-CURRENT_MPIRUN_PATH = "/usr/lib64/mpich/bin/mpirun"     # or /opt/openmpi/bin/mpirun
+#CURRENT_MPIRUN_PATH = "/opt/openmpi/bin/mpirun"   
+CURRENT_MPIRUN_PATH = "/usr/lib64/mpich/bin/mpirun"
 
 PIDSTAT_INTERVAL = 2        #in sec
 # no longer in use TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
@@ -78,7 +79,7 @@ def __proc_query_result(geno_str):
       return ret
 
 def startPidStats(run_cmd, fdlog ) :
-  known_cmds = ['vcf2tiledb', 'gt_mpi_gather']
+  known_cmds = ['vcf2tiledb', 'gt_mpi_gather', 'java']    #ProfileGenomicsDBCount
   exec_name = None
   for ge_exec in known_cmds:
     if ge_exec in run_cmd :
@@ -100,7 +101,7 @@ def startPidStats(run_cmd, fdlog ) :
 
 def measure_more( cmd, logfile, gen_result_func ) :
   time_lines_count = 6     # how many lines /usr/bin/time produces
-  theExecCmd = ['/usr/bin/time', "-f", "0:%C,1:%e,2:%P,3:%F,4:%R,5:%w,6:%I,7:%O,8:%c,9:%x"] + cmd
+  theExecCmd = ['/usr/bin/time', "-f", "0~%C,1~%e,2~%P,3~%F,4~%R,5~%w,6~%I,7~%O,8~%c,9~%x"] + cmd
   pexec = Popen(theExecCmd, shell=False, stdout=DEVNULL, stderr=PIPE)
   if pexec:
   #    print("**1* INFO @%s: launched time 4 cmd=%s" % (g_hostname, cmd))
@@ -117,7 +118,11 @@ def measure_more( cmd, logfile, gen_result_func ) :
     print("**OUT_EXEC INFO @%s: #output=%d" % (g_hostname, len(qexec)) ) 
     # last is of time
     timeline = qexec.pop().decode('utf-8').strip()
-    time_result = dict(x.split(':') for x in timeline.split(','))
+    try:
+      time_result = dict(x.split('~') for x in timeline.split(','))
+    except ValueError:
+      print("EXCEPTION: timeline=%s" % timeline)
+
     # output of vcf2tiledb
     genome_result=[]
     for i, gl in enumerate(qexec):

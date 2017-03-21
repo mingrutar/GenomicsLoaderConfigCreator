@@ -1,3 +1,5 @@
+#! /usr/bin/python3
+
 import sys
 import os, re
 import os.path
@@ -17,13 +19,13 @@ PARTITION_NUM = 16       # TODO hard coded for now
 PosSelection = { HistogramManager.DIST_RANDOM: 500,  
     HistogramManager.DIST_DENSE: 50, HistogramManager.DIST_SPARSE: 60 }
 
-TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/gt_mpi_gather"
+BUILD_BIN = "/home/mingrutar/cppProjects/GenomicsDB/bin"
+TEST_QUERY_COMMAND = "gt_mpi_gather"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
-
-working_dir = os.environ.get('WS_HOME', os.getcwd())
-query_ws_path = os.path.join(working_dir, 'ws_test_query')
-
+QUERY_JSON_OUTPUT = 'ws_test_query'
 # change as needed
+working_dir = os.getcwd()
+
 def __make_string_of_args(npq_params):
     if 'query_column_ranges' in npq_params:
         npq_params['num_columns'] = len(npq_params['query_column_ranges'][0])
@@ -36,13 +38,17 @@ def __make_string_of_args(npq_params):
     npq_params.pop('query_attributes', None)
     return str(npq_params)
 
+def __gt_mpi_gather_cmd(query_fn):
+    full_cmd = os.path.join(BUILD_BIN, TEST_QUERY_COMMAND)
+    return "{} -j {} --produce-Broad-GVCF".format(full_cmd, query_fn)
+
 # for our test
-def prepareTest(test_def):
+def prepareTest(test_def, cmd_func):
     db_path = os.path.join(working_dir, test_def['source_db_path'])
     data_handler = RunVCFData(db_path)
 
     query_def_list = [ load_run_id['run_id'] for load_run_id in test_def['test_batch'] ]
-    q_def_run_id = data_handler.addRunConfig( str(query_def_list), TARGET_TEST_COMMAND)
+    q_def_run_id = data_handler.addRunConfig( str(query_def_list), TEST_QUERY_COMMAND)
     print("INFO: test query run id is %d" % q_def_run_id)
     
     my_templates = data_handler.getTemplates(working_dir)
@@ -88,11 +94,12 @@ def prepareTest(test_def):
                         selected_pos =[ hm.getPositions(dist_name, num_pos, bin_pos_list[ix]) for ix in range(run['num_proc']) ]
                         pos_list = list(chain.from_iterable(selected_pos))
                         npq_params['query_column_ranges'] = [ pos_list ]
-                        query_fn = os.path.join(query_ws_path, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, dist_name))
+                        query_fn = os.path.join(working_dir, QUERY_JSON_OUTPUT, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, dist_name))
                         with open(query_fn, 'w') as wfd:
                             json.dump(npq_params, wfd)
                         file_count += 1
-                        cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
+                        cmd = cmd_func(query_fn)
+#                        cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
                         if run['num_proc'] > 1:
                             cmd = "mpirun -np %d %s" % (run['num_proc'], cmd)
                         npq_params['pick_mode'] = dist_name
@@ -100,11 +107,12 @@ def prepareTest(test_def):
                         data_handler.addRunLog(q_def_run_id, host, cmd, run['tdb_ws'], run['lc_name'], run['num_proc'], query_arg)
                         hosts[host].append(cmd)
                 else:
-                    query_fn = os.path.join(query_ws_path, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, 'all'))
+                    query_fn = os.path.join(working_dir, QUERY_JSON_OUTPUT, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, 'all'))
                     with open(query_fn, 'w') as wfd:
                         json.dump(npq_params, wfd)
                     file_count += 1
-                    cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
+                    cmd = cmd_func(query_fn)
+#                    cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
                     if run['num_proc'] > 1:
                         cmd = "mpirun -np %d %s" % (run['num_proc'], cmd)
                     query_arg = __make_string_of_args(npq_params)
@@ -112,33 +120,38 @@ def prepareTest(test_def):
                     hosts[host].append(cmd)
                     
     data_handler.close()
-    print("INFO: Generated %d query json @ %s" % (file_count, query_ws_path))
+    print("INFO: Generated %d query json @ %s" % (file_count, os.path.join(working_dir, QUERY_JSON_OUTPUT)))
     return hosts, q_def_run_id
 
 def launch_query(host_run_list, q_def_run_id):
     for host, cmd_list in host_run_list.items():
-        for cmd in cmd_list:
-            print("launching test at %s, cmd= %s %s" % (host, RUN_SCRIPT, q_def_run_id))
-            os.system("ssh %s %s %s &" % (host, RUN_SCRIPT, q_def_run_id ))
+        print("launching test at %s, %s, #cmd= %s" % (host, q_def_run_id, len(cmd_list)))
+        os.system("ssh -tt -n %s %s %s &" % (host, RUN_SCRIPT, q_def_run_id ))
     print("DONE launch... ")
 
-if __name__ == '__main__' :
-    query_config = sys.argv[1] if(len(sys.argv) > 1) else "test_query_def.json"
-
+def check_env(query_config):
+    global working_dir
+    working_dir = os.environ.get('WS_HOME', os.getcwd())
     query_cfg_fn = os.path.join(working_dir, query_config)
 
     if os.path.isfile(query_cfg_fn) :
         with open(query_cfg_fn, 'r') as ifd:
             test_def = json.load(ifd)
+    
+        query_ws_path = os.path.join(working_dir, QUERY_JSON_OUTPUT)
         if os.path.isdir(query_ws_path):
             rmtree(query_ws_path) 
         os.mkdir(query_ws_path)
-
-        host_cfg_list, run_ids = prepareTest(test_def)
-        if platform.system() != 'Windows':          # real run
-            launch_query(host_cfg_list, run_ids )
-            print("DONE Launch... ")
-        else:
-            print("DRYRUN: done")
+        return test_def
     else:
-        print('cannot find query definition file %s' % query_config)
+       raise ValueError("ERROR: test query definition file %s not found" % (query_config))
+    
+if __name__ == '__main__' :
+    query_config = sys.argv[1] if(len(sys.argv) > 1) else "test_query_def.json"
+    test_def = check_env(query_config)
+    host_cfg_list, run_ids = prepareTest(test_def, __gt_mpi_gather_cmd)
+    if platform.system() != 'Windows':          # real run
+        launch_query(host_cfg_list, run_ids )
+        print("DONE Launch... ")
+    else:
+        print("DRYRUN: done")
