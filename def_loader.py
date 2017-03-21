@@ -9,11 +9,13 @@ import uuid
 from datetime import datetime
 import time
 import shutil
-import core_data
+from histogram import HistogramManager
+from core_data import RunVCFData
 
 one_KB = 1024
 one_MB = 1048576
-TILE_WORKSPACE_ROOT = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
+TILE_WORKSPACE_PREFIX = "/mnt/app_hdd1/scratch/mingquery/tiledb-ws"
+# befor 3/92017: TILE_WORKSPACE_PREFIX = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
 TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb"
 MPIRUN = "/opt/openmpi/bin/mpirun"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
@@ -30,10 +32,10 @@ defined_runs = {}           # dbid,
 user_loader_conf_def = {}       # { uuid : { tag : val} }
 run_config = {}                 # { uuid : [ (host, lcdef) ] }
 
-data_handler = core_data.RunVCFData()
+data_handler = RunVCFData()
 histogram_fn = None
 working_dir = os.environ.get('WS_HOME', os.getcwd())
-tile_workspace = ""
+g_tile_workspace = None
 
 def load_from_db() :
     global my_hostlist, my_templates, loader_tags, overridable_tags, defined_loaders, defined_runs
@@ -95,8 +97,7 @@ def __str2num(x) :
             return None
 
 def make_col_partition(bin_num):
-    global tile_workspace
-    print("tile_workspace=%s" % tile_workspace)
+    global g_tile_workspace
     bin_num = int(bin_num)
     partitions = []       
 
@@ -104,28 +105,13 @@ def make_col_partition(bin_num):
     if not histogram_fn:
         # TODO: run histogram utility to generate ?
         print("WARN: no histogram file. 1 partition only")      
-        partitions.append({"array" :"TEST0", "begin" : 0, "workspace" : tile_workspace })
+        partitions.append({"array" :"TEST0", "begin" : 0, "workspace" : g_tile_workspace })
     else:    
-        with open(histogram_fn, 'r') as rfd:
-            context = rfd.readlines()
-        lines = [ l.split(',') for l in context ]
-        hgram = [ (x[0], x[1], float(x[2].rstrip()) ) for x in lines if len(x) == 3 ]
-        bin_size = sum( [ x[2] for x in hgram] ) / bin_num
-        subtotal = 0
-        parnum = 0
-        begin = 0
-        for item in hgram:
-            if subtotal == 0 :
-                begin = int(item[0])
-            subtotal += item[2]
-            if (parnum < bin_num-1) and (subtotal > bin_size) :
-                partitions.append({"array" :"TEST%d" % parnum,
-                    "begin" : begin, "workspace" : tile_workspace })
-                parnum += 1
-                subtotal = 0
-        if (subtotal > 0) :
+        hm = HistogramManager(histogram_fn)
+        begin_list = hm.calc_bin_begin_pos( bin_num)
+        for parnum, begin in enumerate(begin_list):
             partitions.append({"array" :"TEST%d" % parnum,
-                "begin" : begin, "workspace" : tile_workspace })
+                "begin" : begin, "workspace" : g_tile_workspace })
     return partitions
 
 transformer = {'String' : lambda x : x if isinstance(x, str) else None,
@@ -143,18 +129,12 @@ def __getValue(itemType, itemVal) :
         return globals()[itemType[:-2]](itemVal)
     else:
         return None
-
 #SELECT name, type, default_value FROM loader_config_tag
 # user only define the value
 def __genLoadConfig( lc_items ) :
     ''' return json load file '''
     load_conf = {}
-    mpirun_num = 1
-    # tile db ws is tiledb-ws_ts
-    global tile_workspace
-    timestamp = datetime.now().strftime("%y%m%d%H%M")
-    tile_workspace = "%s_%s/" % (TILE_WORKSPACE_ROOT, timestamp)
-
+    partition_num = 1
     # val from db tale
     for key, val in loader_tags.items() :
         load_conf[key] = __getValue(val[1], val[2])
@@ -166,63 +146,79 @@ def __genLoadConfig( lc_items ) :
             else :
                 load_conf [key] = __getValue( val[1], uval)
             if key == "column_partitions" :
-                mpirun_num = int(lc_items[key])
+                partition_num = int(lc_items[key])
         else :                      # use default
             load_conf [key] = __getValue( val[1], val[2])
-    return load_conf, mpirun_num, tile_workspace
- 
+    return load_conf, partition_num
+
+def __generateLoaderConfigFile(run_dir, fn_pre, lc_id):
+    # tile db ws is tiledb-ws_ts
+    global g_tile_workspace
+    g_tile_workspace = "%s_%s-%s/" % (TILE_WORKSPACE_PREFIX, lc_id, fn_pre)
+
+    load_config, partition_num = __genLoadConfig(user_loader_conf_def[lc_id]) 
+    jsonfn = os.path.join(run_dir, "%s-%s.json" % (fn_pre, lc_id))
+    with open(jsonfn, 'w') as ofd :
+        json.dump(load_config, ofd)
+    return jsonfn, g_tile_workspace
+
 def __prepare_run (run_id, target_cmd, user_mpirun) :
-    timestamp = datetime.now().strftime("%y%m%d%H%M")
-    run_dir = os.path.join(working_dir, 'run_%s'%timestamp)
+    ts = int(time.mktime(datetime.now().timetuple()))
+    run_dir = os.path.join(working_dir, 'run_%s' % ts )
     __make_path(run_dir)
     ret = {}
     commandList =[]                         # contains all (command, tile_ws, num_proc)
+    mpirunList = []
     for lc_id in run_config[run_id] :
         if lc_id in user_loader_conf_def:
-            load_config, num_parallel, tile_ws = __genLoadConfig(user_loader_conf_def[lc_id]) 
-            jsonfn = os.path.join(run_dir, "%s-%s.json" % (run_id, lc_id))
-            with open(jsonfn, 'w') as ofd :
-                json.dump(load_config, ofd)
-            # multiple command per loader config according to num_paralle
-            # commands use the same tiledb workspace
             if user_mpirun and lc_id in user_mpirun:
                 for num_pr in user_mpirun[lc_id]:
-                    theCommand = "%s -np %d %s %s" % (MPIRUN, num_pr, target_cmd, jsonfn)  \
-                        if num_pr > 1 else "%s %s" % (target_cmd, jsonfn)
-                    commandList.append((theCommand, tile_ws, num_pr))
+                    if num_pr > 1:
+                        jsonfn, tile_ws = __generateLoaderConfigFile(run_dir, "%s-%s" % (run_id, num_pr), lc_id )
+                        theCommand = "%s -np %d %s %s" % (MPIRUN, num_pr, target_cmd, jsonfn) 
+                        mpirunList.append((theCommand, tile_ws, num_pr, lc_id))
+                    else:
+                        jsonfn, tile_ws = __generateLoaderConfigFile(run_dir, "%s" % run_id, lc_id )
+                        theCommand = "%s %s" % (target_cmd, jsonfn)
+                        commandList.append((theCommand, tile_ws, 1, lc_id))
             else:
+                jsonfn, tile_ws = __generateLoaderConfigFile(run_dir, "%s" % run_id, lc_id )
                 theCommand = "%s %s" % (target_cmd, jsonfn)
-                commandList.append((theCommand, tile_ws, 1))
-    return assign_host(commandList)
+                commandList.append((theCommand, tile_ws, 1, lc_id))
+    return assign_host(commandList, mpirunList)
 
-def assign_host( commands):
-    num_host = len(my_hostlist)
+def assign_host( commands, mpirunList ):
+    romoterun_hosts = my_hostlist[:-1]
+    num_host = len(romoterun_hosts)
     cmdlist_host = {}
     for i, cmd in enumerate(commands):
-        if i < num_host:
-            cmdlist_host[my_hostlist[i]] = [cmd]
+        host = romoterun_hosts[i % num_host]
+        if host in cmdlist_host:
+            cmdlist_host[host].append(cmd) 
         else:
-            cmdlist_host[my_hostlist[i % num_host]].append(  cmd)
-    return cmdlist_host
+            cmdlist_host[host] = [cmd]
+    local_launch = {my_hostlist[-1] : mpirunList}
+    return cmdlist_host, local_launch
 
 def launch_run( run_def_id, dryrun, user_mpirun=None) :
-    ''' assign host to loader_config. 
-    TODO: allow user assign host '''
-    launch_info = __prepare_run(run_def_id, TARGET_TEST_COMMAND, user_mpirun)
+    launch_now, launch_manual = __prepare_run(run_def_id, TARGET_TEST_COMMAND, user_mpirun)
     #TODO: check software readiness @ all hosts
-    print("START run %s loaders @ %s" % (run_def_id, datetime.now()))
-    ws_path = os.path.join(working_dir, 'run_ws')
-    __make_path(ws_path)
-    for host, runCmdList in launch_info.items():
-        exec_list = []
+    print("START run batch id %s %d loaders @ %s" % (run_def_id, len(launch_now), datetime.now()))
+    for host, runCmdList in launch_now.items():
         for runCmd in runCmdList:
-            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[2])
+            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[3], runCmd[2])
         if dryrun :
-            shell_cmd = "ssh %s python %d &" % (host, run_def_id )
+            shell_cmd = "ssh %s %s %d &" % (host, RUN_SCRIPT, run_def_id )
             print('DRYRUN: os.system(%s)' % shell_cmd )
         else :
             print("launching test at %s" % (host))
             os.system("ssh %s %s %d &" % (host, RUN_SCRIPT, run_def_id ))
+    
+    print("INFO run these %d commands @ host locally +++" % len(launch_manual) )
+    for host, runCmdList in launch_manual.items():
+        for runCmd in runCmdList:
+            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[3], runCmd[2])
+        print('command@%s : %s %s' % (host, RUN_SCRIPT, run_def_id))
     print("DONE launch... ")
 
 def assign_run_id(lcdef_list):
