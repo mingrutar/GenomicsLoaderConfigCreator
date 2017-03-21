@@ -2,6 +2,7 @@ import os, os.path
 import pandas
 import math
 import random
+import numpy as num_pos
 
 class HistogramManager(object):
     DIST_RANDOM = 'random'
@@ -10,9 +11,9 @@ class HistogramManager(object):
 
     def __init__(self, file_path):
         if os.path.isfile(file_path):
-            self.df = pandas.read_csv(file_path,skiprows=1,skipfooter=1, engine='python')
+            self.df = pandas.read_csv(file_path,skiprows=1,skipfooter=1,header=None, engine='python')
             self.df.columns = ['start_pos', 'end_pos', 'byte_size']
-            self.df['pos'] = self.df.index 
+            self.df['pos'] = range(len(self.df.index)) 
         else:
             pprint("WARN, file %s not found" % file_path)
 
@@ -35,7 +36,7 @@ class HistogramManager(object):
 
     def calc_bin_begin_pos(self, bin_num):
         bin_start_list = self.calc_bin_idx_pos(bin_num)
-        begin_list = [ item['start_pos'] for item in bin_start_list.iterrows() ]
+        begin_list = [ item['start_pos'].item() for item in bin_start_list ]
         return begin_list
 
     def densePos(self, mydf, num_pos):
@@ -50,9 +51,9 @@ class HistogramManager(object):
 
     def sparsePos(self, mydf, num_pos):
         start_pos = mydf['start_pos'].iloc[0]
-        end_pos = mydf['end_pos'].iloc[-1]
+        end_pos = mydf['end_pos'].iloc[-1]        
         gap = math.floor(( end_pos - start_pos ) /(num_pos))
-        start = random.randint(1, gap-1) + start_pos
+        start = int(gap/2) + start_pos
         pos_list = [ pos for pos in range(start, end_pos, gap) ]
         return pos_list
 

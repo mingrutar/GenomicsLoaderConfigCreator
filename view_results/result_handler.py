@@ -10,12 +10,12 @@ import numpy as np
 import pandas as pd
 import os, os.path
 import sys
+import collections
 
 class TimeResultHandler(object):
     def __init__(self, wkspace=None ):
         self.__wspace = wkspace if wkspace else os.getcwd()
         self.__runid = None
-        self.setResultPath(".")
     
     def setResultPath(self, result_path):
         self.__source = os.path.join(self.__wspace, result_path)
@@ -27,6 +27,8 @@ class TimeResultHandler(object):
                 self.data_handler.close() 
             self.data_handler = core_data.RunVCFData(dbpath) 
             print("INFO found genomicd loader db at %s" % dbpath )
+        else:
+            raise ValueError('No db @ %s' % result_path)
 
     def __transform4Pandas(self, inputRows) :
         ''' inputRows = [ ]
@@ -58,10 +60,11 @@ class TimeResultHandler(object):
     def __get_all_result(self, runid):
         assert runid
         if runid != self.__runid or not self.__runid:
-            results = self.data_handler.getAllResult(runid)
+            results, cmd = self.data_handler.getAllResult(runid)
             if results:
                 self.__all_results = results
                 self.__runid = runid
+                self.genome_data = self.gexec_loader if 'vcf2tiledb' in cmd else self.gexec_query
 
     time_row_labels =['Command', 'Wall Clock (sec)', 'CPU %','Major Page Fault', 'Minor Page Fault', 
          'File System Input', 'File System Output', 'Involunteer Context Switch', 'Volunteer Context Switch','Exit Code']
@@ -83,19 +86,38 @@ class TimeResultHandler(object):
         pddata = [ (row_labels[i], pd ) for i, pd in enumerate(data)]
         return pddata, col_header
 
-    genome_db_tags = {'fv' : 'Fetch from VCF',
-    'cc' : 'Combining Cells', 'fo' : 'Flush Output',
-    'st' : 'sections time', 'ts' : 'time in single thread phase()',
-    'tr' : 'time in read_all()'}
-    gtime_col_header = ['Wall-clock time(s)', 'Cpu time(s)', 'Critical path wall-clock time(s)', 
-            'Critical path Cpu time(s)', '#critical path']
+    gexec_loader = {'tags' : {'fv' : 'Fetch from VCF',
+                            'cc' : 'Combining Cells', 'fo' : 'Flush Output',
+                            'st' : 'sections time', 'ts' : 'time in single thread phase()',
+                            'tr' : 'time in read_all()'},
+            'header' : ['Wall-clock time(s)', 'Cpu time(s)', 'Critical path wall-clock time(s)', 
+                    'Critical path Cpu time(s)', '#critical path'] }
+    gexec_query = {'tags' : { 'cf': 'GenomicsDB cell fill timer',
+                                'bs' : 'bcf_t serialization',
+                                'ot' : 'Operator time', 
+                                'sq' : 'Sweep at query begin position', 
+                                'ti' : 'TileDB iterator', 
+                                'tt' : 'Total scan_and_produce_Broad_GVCF time for rank 0', 
+                                'tb' : 'TileDB to buffer cell', 
+                                'bc' : 'bcf_t creation time'  },
+            'header' : ['Cpu time(s)', 'Wall-clock time(s)'] }
+
     def __get_genome_result4run(self, gendata4run):
-        row_list = [0.0] * len(self.gtime_col_header)
+        ll = len(gendata4run)
+        row_list = [''] * ll
         for key, val in gendata4run.items():
             if key != 'op':
-                row_list[int(key)] = val
-        return self.genome_db_tags[gendata4run['op']], row_list
-                
+                if '.' in key:
+                    idx = int(float(key))
+                    if idx < ll:
+                        row_list[idx] = val          # patch a mistake @ generator
+                else:
+                    row_list[int(key)] = val
+        if gendata4run['op'] in self.genome_data['tags']:
+            return self.genome_data['tags'][gendata4run['op']], row_list
+        else:
+            return gendata4run['op'], row_list
+
     def get_genome_results(self, runid, subidStr):
         ''' subidStr = LOAD_1,  LOAD_n '''
         self.__get_all_result(runid)
@@ -104,7 +126,7 @@ class TimeResultHandler(object):
         rows = []
         for gtimes in self.__all_results[subid]['gtime'] :      # list
             rows.append(self.__get_genome_result4run(gtimes))
-        return rows, self.gtime_col_header
+        return rows, self.genome_data['header']
 
     def get_pidstats(self, runid):
         self.__get_all_result(runid)
@@ -119,17 +141,21 @@ class TimeResultHandler(object):
 
     def write_csv_labels(self, csv_fd, confgiList):
         ldname =  next (iter (confgiList.values()))
+
         lc_labels = [ k for k in ldname.keys() ]
         rtime = self.__all_results[0]['rtime']      # name:val
-        rtime_labels = [ self.time_row_labels[int(x)] for x in rtime.keys() ]
-        
+        rtime_labels = [''] * len(rtime)
+        for k,v in rtime.items():
+            idx = int(k)
+            rtime_labels[idx] = self.time_row_labels[idx]
+
         gtime_labels = []
         gtimes = self.__all_results[0]['gtime']      #  30 labels num_ops x num(gtime_col_header)
-        num_op = len(self.genome_db_tags)
+        num_op = len(self.genome_data['tags'])
         perproc_count = 0
         for gt_item in gtimes:
             opname, gdata = self.__get_genome_result4run(gt_item)
-            gt_op_labels = [ "%s_%s" % (opname, hname) for hname in self.gtime_col_header ]
+            gt_op_labels = [ "%s_%s" % (opname, hname) for hname in self.genome_data['header'] ]
             gtime_labels.extend(gt_op_labels)
             perproc_count += 1
             if perproc_count % num_op == 0:
@@ -139,21 +165,36 @@ class TimeResultHandler(object):
                 return
 
     def export2csv(self, run_dir, runid=None):
-        my_runid, configDict = self.data_handler.getRunConfigsDict(runid) 
-        assert(my_runid != None and len(configDict) > 0)
+        if not runid:
+            runid = self.data_handler.getLastRun()
+        cmd = self.data_handler.getRunCommand(runid)
+        if 'vcf2tiledb' in cmd:
+            loader_run_id = runid
+        else:
+            loader_run_id = self.data_handler.getLoadRunId(runid)[0]
+        configDict = {}
+        for lcname, cfg in self.data_handler.getRunConfigsDict(loader_run_id).items():
+            sorted_cfg = collections.OrderedDict( sorted(cfg.items(), key = lambda k : k[0]))   # sorted by key
+            configDict[lcname] = sorted_cfg
+
+        my_runid = runid
+        assert(my_runid != None and configDict)
+
         print("INFO export test run %d to csv..." % my_runid)
 
         self.__get_all_result(my_runid)
-        filename = os.path.join(self.__wspace, "csvfiles", "%s_%s.csv" % (run_dir, my_runid))
+        filename = os.path.join(self.__wspace, "csvfiles", "%s_%s-%s.csv" % (run_dir, my_runid, os.path.basename(cmd)))
         csv_fd = open(filename, 'w')
         self.write_csv_labels(csv_fd, configDict)
 
         for row in self.__all_results:
             lc_data = [ v for v in configDict[row['lcname']].values() ]
             rtime = row['rtime']      # name:val
-            rtime_data = [ v for v in rtime.values() ]
+            rtime_data = [''] * len(rtime)
+            for k,v in rtime.items():
+                rtime_data[int(k)] = v
             perproc_count = 0
-            num_op = len(self.genome_db_tags)
+            num_op = len(self.genome_data['tags'])
             gtime_data = []
             for gtime in row['gtime']:      # list
                 opname, gdata = self.__get_genome_result4run(gtime)
@@ -185,9 +226,9 @@ if __name__ == '__main__':
     print("mypath=%s" % mypath)
     resultData = TimeResultHandler(mypath)
 
-    run_dir = "run_mpi" 
+    run_dir = os.path.join("vcf2tiledb-data", "VDA413")
     resultData.setResultPath(run_dir)
-    runid = 6
+    runid = 13
     csv_file = resultData.export2csv(run_dir, runid)
     print("csv file @ %s" % csv_file)
 
