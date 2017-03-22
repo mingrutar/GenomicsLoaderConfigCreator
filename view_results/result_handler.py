@@ -66,9 +66,9 @@ class TimeResultHandler(object):
                 self.__all_results = results
                 self.__runid = runid
                 self.genome_data = self.gexec_loader if 'vcf2tiledb' in cmd else self.gexec_query
-
     time_row_labels =['Command', 'Wall Clock (sec)', 'CPU %','Major Page Fault', 'Minor Page Fault', 
-         'File System Input', 'File System Output', 'Involunteer Context Switch', 'Volunteer Context Switch','Exit Code']
+         'Involunteer Context Switch', 'File System Input', 'File System Output', 'Volunteer Context Switch',
+         'Exit Code','Avg total memory','Max resident set size','Avg resident set size']
     
     def shorten_command(self, line):
         llst = [  os.path.basename(cl) for cl in line.split() ]
@@ -208,7 +208,8 @@ class TimeResultHandler(object):
         csv_stat_fd = open(filename_stat, 'w')
         stat_writer = csv.writer(csv_stat_fd)
         self.write_csv_stat_labels(stat_writer, configDict)
-
+        stat_drop_front = int(30/2);            # drop 15 sec
+        stat_drop_end = -int(60/2);            # drop 15 sec
         for row in self.__all_results:
             lc_data = [ v for v in configDict[row['lcname']].values() ]
             rtime = row['rtime']      # name:val
@@ -220,6 +221,8 @@ class TimeResultHandler(object):
                 stats_data = []
                 full_fn = os.path.join(self.__source, 'stats', os.path.basename(fn))
                 stat_df = pd.DataFrame.from_csv(full_fn)
+                stat_df = stat_df[stat_drop_front:]
+                stat_df = stat_df[:stat_drop_end]
                 for col in self.STATS_HEADS:
                     stats_data.append(stat_df[col].mean())
                     stats_data.append(stat_df[col].std() / stats_data[-1])
@@ -260,9 +263,11 @@ if __name__ == '__main__':
     print("mypath=%s" % mypath)
     resultData = TimeResultHandler(mypath)
 
-    run_dir = os.path.join("vcf2tiledb-data", "VDA349")
-    resultData.setResultPath(run_dir)
+    subdir="VDA349"
     runid = 17
+
+    run_dir = os.path.join("vcf2tiledb-data", subdir)
+    resultData.setResultPath(run_dir)
     csv_file = resultData.export2csv(run_dir, runid)
     print("csv file @ %s" % csv_file)
 
