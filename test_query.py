@@ -15,16 +15,18 @@ from itertools import chain
 peformance test for genomics data retriever
 '''
 PARTITION_NUM = 16       # TODO hard coded for now
-# define number of positions to pcik for random, dense and sparse
+# define number of positions to pcik for random, dense and sparse, TODO: not in use
 PosSelection = { HistogramManager.DIST_RANDOM: 500,  
     HistogramManager.DIST_DENSE: 50, HistogramManager.DIST_SPARSE: 60 }
 
 BUILD_BIN = "/home/mingrutar/cppProjects/GenomicsDB/bin"
 TEST_QUERY_COMMAND = "gt_mpi_gather"
+
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
 QUERY_JSON_OUTPUT = 'ws_test_query'
 # change as needed
 working_dir = os.getcwd()
+full_cmd_formatter = {}
 
 def __make_string_of_args(npq_params):
     if 'query_column_ranges' in npq_params:
@@ -38,17 +40,13 @@ def __make_string_of_args(npq_params):
     npq_params.pop('query_attributes', None)
     return str(npq_params)
 
-def __gt_mpi_gather_cmd(query_fn):
-    full_cmd = os.path.join(BUILD_BIN, TEST_QUERY_COMMAND)
-    return "{} -j {} --produce-Broad-GVCF".format(full_cmd, query_fn)
-
 # for our test
-def prepareTest(test_def, cmd_func):
+def prepareTest(test_def, cmd_type):
     db_path = os.path.join(working_dir, test_def['source_db_path'])
     data_handler = RunVCFData(db_path)
 
     query_def_list = [ load_run_id['run_id'] for load_run_id in test_def['test_batch'] ]
-    q_def_run_id = data_handler.addRunConfig( str(query_def_list), TEST_QUERY_COMMAND)
+    q_def_run_id = data_handler.addRunConfig( str(query_def_list), cmd_type)
     print("INFO: test query run id is %d" % q_def_run_id)
     
     my_templates = data_handler.getTemplates(working_dir)
@@ -98,7 +96,7 @@ def prepareTest(test_def, cmd_func):
                         with open(query_fn, 'w') as wfd:
                             json.dump(npq_params, wfd)
                         file_count += 1
-                        cmd = cmd_func(query_fn)
+                        cmd =  full_cmd_formatter[cmd_type] % (query_fn)
 #                        cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
                         if run['num_proc'] > 1:
                             cmd = "mpirun -np %d %s" % (run['num_proc'], cmd)
@@ -111,7 +109,7 @@ def prepareTest(test_def, cmd_func):
                     with open(query_fn, 'w') as wfd:
                         json.dump(npq_params, wfd)
                     file_count += 1
-                    cmd = cmd_func(query_fn)
+                    cmd =  full_cmd_formatter[cmd_type] % (query_fn)
 #                    cmd = "{} -j {} --produce-Broad-GVCF".format(TARGET_TEST_COMMAND, query_fn)
                     if run['num_proc'] > 1:
                         cmd = "mpirun -np %d %s" % (run['num_proc'], cmd)
@@ -122,6 +120,9 @@ def prepareTest(test_def, cmd_func):
     data_handler.close()
     print("INFO: Generated %d query json @ %s" % (file_count, os.path.join(working_dir, QUERY_JSON_OUTPUT)))
     return hosts, q_def_run_id
+
+def add_cmd_formatter(aType, cmd_formatter):
+    full_cmd_formatter[aType] = cmd_formatter
 
 def launch_query(host_run_list, q_def_run_id):
     for host, cmd_list in host_run_list.items():
@@ -149,7 +150,8 @@ def check_env(query_config):
 if __name__ == '__main__' :
     query_config = sys.argv[1] if(len(sys.argv) > 1) else "test_query_def.json"
     test_def = check_env(query_config)
-    host_cfg_list, run_ids = prepareTest(test_def, __gt_mpi_gather_cmd)
+    add_cmd_formatter(TEST_QUERY_COMMAND, "%s -j %%s --produce-Broad-GVCF" % os.path.join(BUILD_BIN, TEST_QUERY_COMMAND))
+    host_cfg_list, run_ids = prepareTest(test_def, TEST_QUERY_COMMAND)
     if platform.system() != 'Windows':          # real run
         launch_query(host_cfg_list, run_ids )
         print("DONE Launch... ")

@@ -15,7 +15,7 @@ from datetime import datetime
 #CURRENT_MPIRUN_PATH = "/opt/openmpi/bin/mpirun"   
 CURRENT_MPIRUN_PATH = "/usr/lib64/mpich/bin/mpirun"
 
-PIDSTAT_INTERVAL = 2        #in sec
+PIDSTAT_INTERVAL = 5        # in sec
 # no longer in use TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 
 DEVNULL = open(os.devnull, 'wb', 0)
@@ -73,9 +73,14 @@ def __proc_query_result(geno_str):
       else:
         print('WARN @%s: operation string %s not found' % (g_hostname, op_str))
         ret['op'] = op_str.replace(' ', '_')
-
-      ret['0'] = lines[3]    #wall clock
-      ret['1'] = lines[5]    #CPU time 
+      
+      for i in range(2, len(lines)):
+          if 'Cpu time(s)' in lines[i]:
+            i += 1
+            ret['0'] = lines[i]    # CPU
+          if 'Wall-clock time(s)' in lines[i]:
+            i += 1
+            ret['1'] = lines[i]    # wall clock
       return ret
 
 def startPidStats(run_cmd, fdlog ) :
@@ -88,11 +93,9 @@ def startPidStats(run_cmd, fdlog ) :
   pstat = None
   if exec_name :
     try:
-      pidlist = check_output(['/usr/bin/pgrep', exec_name])
-#     print("type(pidlist)={}, pidlist={}".format(type(pidlist), pidlist))
-      pidstr = pidlist.decode('utf-8').replace('\n', ',')
-#    print("INFO @{}: pid for {} are {}".format(g_hostname, exec_name, pidstr))
-      pstat = Popen(['/usr/bin/pidstat', '-hdIlruw', '1', '-p', pidstr ], stdout=fdlog, stderr=fdlog)
+      #pidlist = check_output(['/usr/bin/pgrep', exec_name])
+      #pidstr = pidlist.decode('utf-8').replace('\n', ',')
+      pstat = Popen(['/usr/bin/pidstat', '-hdIruw', '-C', exec_name, str(PIDSTAT_INTERVAL) ], stdout=fdlog, stderr=fdlog)
     except CalledProcessError as cperr:
       print("CalledProcessError error: {}".format(cperr))
   else:
@@ -101,7 +104,7 @@ def startPidStats(run_cmd, fdlog ) :
 
 def measure_more( cmd, logfile, gen_result_func ) :
   time_lines_count = 6     # how many lines /usr/bin/time produces
-  theExecCmd = ['/usr/bin/time', "-f", "0~%C,1~%e,2~%P,3~%F,4~%R,5~%w,6~%I,7~%O,8~%c,9~%x"] + cmd
+  theExecCmd = ['/usr/bin/time', "-f", "0~%C,1~%e,2~%P,3~%F,4~%R,5~%w,6~%I,7~%O,8~%c,9~%x,10~%M,11~%t,12~%K"] + cmd
   pexec = Popen(theExecCmd, shell=False, stdout=DEVNULL, stderr=PIPE)
   if pexec:
   #    print("**1* INFO @%s: launched time 4 cmd=%s" % (g_hostname, cmd))
@@ -169,7 +172,7 @@ def get_command(run_def_id, db_path, run_id):
     return ret
 
 def pidstat2cvs(ifile, of_prefix) :
-    extract_fields = lambda l: [ l[i] for i in [0, 6,7,12, 13,14,17 ] ]
+    extract_fields = lambda l: [ l[i] for i in [0, 6,7,8,9,10,11,12,13,14,17 ] ]
     with open(ifile, 'r') as fd:
         lines = fd.readlines()
     header = extract_fields( lines[2][1:].split() )
