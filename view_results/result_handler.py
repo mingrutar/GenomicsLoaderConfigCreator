@@ -11,6 +11,7 @@ import pandas as pd
 import os, os.path
 import sys
 import collections
+import csv
 
 class TimeResultHandler(object):
     def __init__(self, wkspace=None ):
@@ -138,6 +139,23 @@ class TimeResultHandler(object):
     
     def close(self):
         self.data_handler.close()
+    
+    STATS_HEADS = ["%MEM", "kB_rd/s", "kB_wr/s"]
+    STATS_ATTR = ["mean", "cv"]
+    def write_csv_stat_labels(self, stat_writer, confgiList):
+        ldname =  next (iter (confgiList.values()))
+
+        lc_labels = [ k for k in ldname.keys() ]
+        rtime = self.__all_results[0]['rtime']      # name:val
+        rtime_labels = [''] * len(rtime)
+        for k,v in rtime.items():
+            idx = int(k)
+            rtime_labels[idx] = self.time_row_labels[idx]
+        
+        stat_labels = []
+        [ stat_labels.extend([ "%s_%s" % (st, att) for att in self.STATS_ATTR ] ) for st in self.STATS_HEADS ]
+        labels = lc_labels +  rtime_labels + stat_labels
+        stat_writer.writerow(labels)
 
     def write_csv_labels(self, csv_fd, confgiList):
         ldname =  next (iter (confgiList.values()))
@@ -183,9 +201,13 @@ class TimeResultHandler(object):
         print("INFO export test run %d to csv..." % my_runid)
 
         self.__get_all_result(my_runid)
-        filename = os.path.join(self.__wspace, "csvfiles", "%s_%s-%s.csv" % (run_dir, my_runid, os.path.basename(cmd)))
+        filename = os.path.join(self.__wspace, "csvfiles", "%s_%s-%s.csv" % (os.path.basename(run_dir), my_runid, os.path.basename(cmd)))
         csv_fd = open(filename, 'w')
         self.write_csv_labels(csv_fd, configDict)
+        filename_stat = os.path.join(self.__wspace, "csvfiles", "%s_%s-%s-stat.csv" % (os.path.basename(run_dir), my_runid, os.path.basename(cmd)))
+        csv_stat_fd = open(filename_stat, 'w')
+        stat_writer = csv.writer(csv_stat_fd)
+        self.write_csv_stat_labels(stat_writer, configDict)
 
         for row in self.__all_results:
             lc_data = [ v for v in configDict[row['lcname']].values() ]
@@ -193,6 +215,17 @@ class TimeResultHandler(object):
             rtime_data = [''] * len(rtime)
             for k,v in rtime.items():
                 rtime_data[int(k)] = v
+
+            for fn in row['pidstat']:
+                stats_data = []
+                full_fn = os.path.join(self.__source, 'stats', os.path.basename(fn))
+                stat_df = pd.DataFrame.from_csv(full_fn)
+                for col in self.STATS_HEADS:
+                    stats_data.append(stat_df[col].mean())
+                    stats_data.append(stat_df[col].std() / stats_data[-1])
+                stat_row = lc_data + rtime_data + stats_data
+                stat_writer.writerow(stat_row)
+
             perproc_count = 0
             num_op = len(self.genome_data['tags'])
             gtime_data = []
@@ -206,6 +239,7 @@ class TimeResultHandler(object):
                     csv_fd.flush()
                     del gtime_data[:]
         csv_fd.close()
+        csv_stat_fd.close()
         return filename
 
 def testTimeResultHandler(resultData):
@@ -226,9 +260,9 @@ if __name__ == '__main__':
     print("mypath=%s" % mypath)
     resultData = TimeResultHandler(mypath)
 
-    run_dir = os.path.join("vcf2tiledb-data", "VDA413")
+    run_dir = os.path.join("vcf2tiledb-data", "VDA349")
     resultData.setResultPath(run_dir)
-    runid = 13
+    runid = 17
     csv_file = resultData.export2csv(run_dir, runid)
     print("csv file @ %s" % csv_file)
 

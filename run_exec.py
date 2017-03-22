@@ -73,9 +73,14 @@ def __proc_query_result(geno_str):
       else:
         print('WARN @%s: operation string %s not found' % (g_hostname, op_str))
         ret['op'] = op_str.replace(' ', '_')
-
-      ret['0'] = lines[3]    #wall clock
-      ret['1'] = lines[5]    #CPU time 
+      
+      for i in range(2, ken(lines)):
+          if 'Cpu time(s)' in lines[i]:
+            i += 1
+            ret['0'] = lines[i]    # CPU
+          if 'Wall-clock time(s)' in lines[i]:
+            i += 1
+            ret['1'] = lines[i]    # wall clock
       return ret
 
 def startPidStats(run_cmd, fdlog ) :
