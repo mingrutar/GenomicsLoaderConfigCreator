@@ -91,3 +91,15 @@ CREATE TABLE IF NOT EXISTS time_result (
    db_size INTEGER DEFAULT 0,
    pidstat_path TEXT
 );
+
+--- execution info, buid_tag is an abitrary value 
+CREATE TABLE IF NOT EXISTS exec_info (
+   _id INTEGER PRIMARY KEY AUTOINCREMENT,
+   buid_tag TEXT NOT NULL,
+   name TEXT NOT NULL,
+   version TEXT DEAFULT '0.4',
+   full_path TEXT NOT NULL,
+   build_time INTEGER NULL,
+   hash TEXT,
+   other TEXT
+ );

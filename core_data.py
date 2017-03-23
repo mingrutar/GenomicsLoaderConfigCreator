@@ -25,7 +25,7 @@ class RunVCFData(object):
         'Last_Run_Config' : 'SELECT loader_configs, _id FROM run_def ORDER BY _id desc LIMIT 1;',
         'User_Config' : 'SELECT config FROM loader_config_def WHERE name in (%s);',
         'User_Config_dict' : "SELECT name, config FROM loader_config_def WHERE name in (%s);",
-        'Time_Results' : 'SELECT tr.time_result, tr.genome_result, tr.pidstat_path, rl.lcname, rl.num_parallel FROM time_result tr, run_log rl where tr.run_id=rl._id and rl.run_def_id=%d order by rl._id desc;',
+        'Time_Results' : 'SELECT tr.time_result, tr.genome_result, tr.pidstat_path, rl.lcname, rl.num_parallel,rl.profiler FROM time_result tr, run_log rl where tr.run_id=rl._id and rl.run_def_id=%d order by rl._id desc;',
         'Runs_of_RunDef' : 'SELECT lcname, num_parallel, tiledb_ws, host_id, full_cmd FROM run_log WHERE run_def_id=%d;',
         'Get_Command' : 'SELECT target_comand from run_def WHERE _id = %d', 
         'Run_ConfigNames' : 'SELECT lcname from run_log WHERE run_def_id = %d',
@@ -187,6 +187,10 @@ class RunVCFData(object):
             rowresult['pidstat'] = eval(row[2])
             rowresult['lcname'] = row[3]
             rowresult['n_parallel'] = row[4]
+            try:
+                rowresult['extra_info'] = dict(eval(row[5]))
+            except:
+                rowresult['extra_info'] = None
 
             all_results.append(rowresult)
         cmd = mycursor.execute(self.queries['Get_Command'] % runid).fetchone()
