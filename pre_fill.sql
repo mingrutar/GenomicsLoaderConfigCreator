@@ -15,6 +15,9 @@ INSERT INTO host (hostname) VALUES ("compute-2-27");
 INSERT INTO host (hostname) VALUES ("compute-2-28");
 INSERT INTO host (hostname) VALUES ("compute-2-29");
 
+---scheme_info
+INSERT INTO scheme_info (version) VALUES ("0.2");
+
 --- template 
 INSERT INTO template (name, file_path) VALUES ("vid", '$WS_HOME/templates/vid.json' );
 INSERT INTO template (name, file_path, params, extra) 
@@ -51,8 +54,6 @@ VALUES ("discard_vcf_index", 'Boolean', "true");
 INSERT INTO loader_config_tag (name, type, default_value) 
 VALUES ("produce_tiledb_array", 'Boolean', "true");
 INSERT INTO loader_config_tag (name, type, default_value) 
-VALUES ("tiledb_compression_level", 'Number', "6");
-INSERT INTO loader_config_tag (name, type, default_value) 
 VALUES ("disable_synced_writes", 'Boolean', "true");
 INSERT INTO loader_config_tag (name, type, default_value) 
 VALUES ("delete_and_create_tiledb_array", 'Boolean', "true");
@@ -85,6 +86,9 @@ INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definab
 VALUES ("segment_size", 'MB', "10", 'sg', 1);
 INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
 VALUES ("do_ping_pong_buffering", 'Boolean', "false", 'pb', 1);
+---added mar 30
+INSERT INTO loader_config_tag (name, type, default_value, tag_code, user_definable) 
+VALUES ("tiledb_compression_level", 'Number', "6", 'cl', 1);
 
 -- for query_config_tag, not in use yet --
 INSERT INTO query_config_tag (name, type, default_value) 

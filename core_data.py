@@ -1,14 +1,19 @@
 import sqlite3
 import os, os.path
+import sys
 import json
 import time
 
+# TODO: getAllHosta(), AllHost, setHosts(), SET_HOSTS
 class RunVCFData(object):
     DefaultDBName = 'genomicsdb_loader.db'
+    CreateDBScript = 'create_scheme.sql'
+    PrefillDBScript = 'pre_fill.sql'
 
     __extra_data = {}
 
     queries = {
+        "AllHost" : 'SELECT hostname FROM host;',
         "Host" : 'SELECT hostname FROM host WHERE avalability = 1;',
         "Template" : 'SELECT name, file_path, params, extra FROM template;',
         "LC_Tag" : 'SELECT name, type, default_value FROM loader_config_tag where user_definable=0;',
@@ -16,61 +21,54 @@ class RunVCFData(object):
         'AllUser_LC' : 'SELECT name, config, _id from loader_config_def;',
         'AllRuns' : 'SELECT _id, loader_configs from run_def;',
 
-        'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config, creation_ts) VALUES (\"%s\", \"%s\", %d);",
-        'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, target_comand, creation_ts) VALUES (\"%s\", \"%s\", %d);',
-        'INSERT_RUN_LOG' : 'INSERT INTO run_log (run_def_id, num_parallel, full_cmd, tiledb_ws, host_id, lcname, profiler, creation_ts) VALUES (%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",%d);',
-        'INSERT_QUERY_RUN_DEF' : 'INSERT INTO run_def (run_loader_id, target_comand, creation_ts) VALUES (%d, \"%s\", %d);',
+        'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config) VALUES (\"%s\", \"%s\");",
+        'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, target_command) VALUES (\"%s\", \"%s\");',
+        'INSERT_EXEC_DEF' : 'INSERT INTO exec_def (run_def_id, num_parallel, full_cmd, tiledb_ws, host_id, lcname, extra_info) VALUES (%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\");',
+        'INSERT_QUERY_RUN_DEF' : 'INSERT INTO run_def (run_loader_id, target_command) VALUES (%d, \"%s\");',
+
+        'SET_HOSTS' : "UPDATE host set avalability=%d WHERE hostname in (%s);",  
 
         'Run_Config' : 'SELECT loader_configs, _id FROM run_def WHERE _id=%d;',
         'Last_Run_Config' : 'SELECT loader_configs, _id FROM run_def ORDER BY _id desc LIMIT 1;',
         'User_Config' : 'SELECT config FROM loader_config_def WHERE name in (%s);',
         'User_Config_dict' : "SELECT name, config FROM loader_config_def WHERE name in (%s);",
-        'Time_Results' : 'SELECT tr.time_result, tr.genome_result, tr.pidstat_path, rl.lcname, rl.num_parallel,rl.profiler FROM time_result tr, run_log rl where tr.run_id=rl._id and rl.run_def_id=%d order by rl._id desc;',
-        'Runs_of_RunDef' : 'SELECT lcname, num_parallel, tiledb_ws, host_id, full_cmd FROM run_log WHERE run_def_id=%d;',
-        'Get_Command' : 'SELECT target_comand from run_def WHERE _id = %d', 
-        'Run_ConfigNames' : 'SELECT lcname from run_log WHERE run_def_id = %d',
+        'Time_Results' : 'SELECT tr.time_result, tr.genome_result, tr.pidstat_path, rl.lcname, rl.num_parallel,rl.profiler FROM time_result tr, exec_def rl where tr.run_id=rl._id and rl.run_def_id=%d order by rl._id desc;',
+        'Runs_of_RunDef' : 'SELECT lcname, num_parallel, tiledb_ws, host_id, full_cmd FROM exec_def WHERE run_def_id=%d;',
+        'Get_Command' : 'SELECT target_command from run_def WHERE _id = %d', 
+        'Run_ConfigNames' : 'SELECT lcname from exec_def WHERE run_def_id = %d',
         'Last_Run_Def' : 'SELECT _id FROM run_def ORDER BY _id DESC LIMIT 1',
         'Get_LoaderRunId' : 'SELECT loader_configs from run_def WHERE _id = %d',
-
-        # for backwards compatibility only, add lcname. TODO remove when no longer needed        
-        'SELECTALL_RUN_LOG' : 'SELECT * FROM run_log limit 1;',
-        'ADD_LCNAME2RUN_LOG' : 'ALTER table run_log ADD column "lcname" "TEXT";',
-        'SELECT_RUN_LOG' : 'SELECT _id , full_cmd, tiledb_ws FROM run_log WHERE run_def_id=%d;',
-        'SELECT_RUN_LOG_ALL' : 'SELECT _id , full_cmd, tiledb_ws FROM run_log;',
-        'UPDATE_RUN_LOG' : 'UPDATE run_log SET lcname="%s" WHERE _id = %s;'
         }
-    
-    def updateRunLogLCName(self, rundef_id=None) :
-        mycursor = self.db_conn.cursor()
-        mycursor.execute(self.queries["SELECTALL_RUN_LOG"])
-        if 'lcname' not in [ x[0] for x in mycursor.description ]:
-            mycursor.execute(self.queries['ADD_LCNAME2RUN_LOG'])
-
-        mycursor2 = self.db_conn.cursor()
-        stmt = self.queries["SELECT_RUN_LOG"] % rundef_id if rundef_id else self.queries["SELECT_RUN_LOG_ALL"]
-        mycursor.execute(stmt)
-        rows = list(mycursor.fetchall())
-        q_count = 0
-        l_count = 0
-        ll = len('tiledb-ws_')
-        for r in reversed(rows):
-            if 'vcf2tiledb' in r[1]:
-                lcname = r[1].split('-')[-1][:-5]
-                l_count += 1
-            else:
-                sstmp = os.path.basename(r[2][1:-1])[ll:]
-                lcname = sstmp.split('-')[0]
-                q_count += 1
-            update_query = self.queries['UPDATE_RUN_LOG'] % (lcname, r[0])
-            mycursor2.execute(update_query)
-        self.db_conn.commit()
-        mycursor.close()
-        mycursor2.close()
-        print("updateRunLogLCName change %d loader and %d query rec" % (l_count, q_count))
+    def __create_db(self):
+        if os.path.isfile(CreateDBScript) and os.path.isfile(PrefillDBScript):
+            with open(CreateDBScript) as fdsc:
+                sqltext = fdsc.read()
+            db_conn = sqlite3.connect(self.db_name)
+            mycursor = db_conn.cursor()
+            mycursor.executescript(sqltext)
+            with open(PrefillDBScript) as fdsc:
+                sqltext = fdsc.read()
+            mycursor.executescript(sqltext)
+            db_conn.commit()
+            self.db_conn = db_conn
+        else:
+            raise RuntimeError("Miss DB creation scripts")
 
     def __init__(self, db_name=None):
-        self.db_name = db_name if db_name else self.DefaultDBName 
-        self.db_conn = sqlite3.connect(self.db_name)
+        the_db_name = db_name if db_name else self.DefaultDBName 
+        if os.path.isfile(the_db_name):
+            self.db_name = the_db_name
+            self.db_conn = sqlite3.connect(self.db_name)
+        elif db_name:
+            try:
+                self.db_name = db_name
+                self.__create_db()
+            except:
+                self.db_name = None
+                print("Failed to create database, error: %s", sys.exc_info()[0])
+                raise 
+        else:
+            raise ArgumentError("Invalid database name")
 
     def getRunsInfo(self, runid):
         assert(runid)
@@ -290,7 +288,7 @@ class RunVCFData(object):
 
     def addUserDefinedConfig(self, lcname, configStr) :
         mycursor = self.db_conn.cursor()
-        stmt = self.queries['INSERT_LOADER'] % (lcname, configStr, int(time.time()) )
+        stmt = self.queries['INSERT_LOADER'] % (lcname, configStr )
         mycursor.execute(stmt)
         loader_id = mycursor.lastrowid
         self.db_conn.commit()
@@ -299,7 +297,7 @@ class RunVCFData(object):
 
     def addRunConfig(self, configs, cmd ):
         mycursor = self.db_conn.cursor()
-        stmt = self.queries['INSERT_RUN_DEF'] % (configs, cmd, int(time.time()) )
+        stmt = self.queries['INSERT_RUN_DEF'] % (configs, cmd )
         mycursor.execute(stmt)
         run_id = mycursor.lastrowid
         self.db_conn.commit()
@@ -308,7 +306,7 @@ class RunVCFData(object):
 
     def addRunLog(self, rundef_id, host, cmd, tiledb_ws, loader_cfg, num_parallel=1, query_params=""):
         mycursor = self.db_conn.cursor()
-        stmt = self.queries['INSERT_RUN_LOG'] % (rundef_id, num_parallel, cmd, tiledb_ws, host, loader_cfg, query_params, int(time.time()) )
+        stmt = self.queries['INSERT_EXEC_DEF'] % (rundef_id, num_parallel, cmd, tiledb_ws, host, loader_cfg, query_params )
         mycursor.execute(stmt)
         run_id = mycursor.lastrowid
         self.db_conn.commit()
