@@ -23,7 +23,7 @@ class RunVCFData(object):
 
         'INSERT_LOADER' : "INSERT INTO loader_config_def (name, config) VALUES (\"%s\", \"%s\");",
         'INSERT_RUN_DEF' : 'INSERT INTO run_def (loader_configs, target_command) VALUES (\"%s\", \"%s\");',
-        'INSERT_EXEC_DEF' : 'INSERT INTO exec_def (run_def_id, num_parallel, full_cmd, tiledb_ws, host_id, lcname, extra_info) VALUES (%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\");',
+        'INSERT_EXEC_DEF' : 'INSERT INTO exec_def (run_def_id, num_parallel, full_cmd, tiledb_ws, hostname, lcname, description) VALUES (%d,%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\");',
         'INSERT_QUERY_RUN_DEF' : 'INSERT INTO run_def (run_loader_id, target_command) VALUES (%d, \"%s\");',
 
         'SET_HOSTS' : "UPDATE host set avalability=%d WHERE hostname in (%s);",  
@@ -33,20 +33,20 @@ class RunVCFData(object):
         'User_Config' : 'SELECT config FROM loader_config_def WHERE name in (%s);',
         'User_Config_dict' : "SELECT name, config FROM loader_config_def WHERE name in (%s);",
         'Time_Results' : 'SELECT tr.time_result, tr.genome_result, tr.pidstat_path, rl.lcname, rl.num_parallel,rl.profiler FROM time_result tr, exec_def rl where tr.run_id=rl._id and rl.run_def_id=%d order by rl._id desc;',
-        'Runs_of_RunDef' : 'SELECT lcname, num_parallel, tiledb_ws, host_id, full_cmd FROM exec_def WHERE run_def_id=%d;',
+        'Runs_of_RunDef' : 'SELECT lcname, num_parallel, tiledb_ws, hostname, full_cmd FROM exec_def WHERE run_def_id=%d;',
         'Get_Command' : 'SELECT target_command from run_def WHERE _id = %d', 
         'Run_ConfigNames' : 'SELECT lcname from exec_def WHERE run_def_id = %d',
         'Last_Run_Def' : 'SELECT _id FROM run_def ORDER BY _id DESC LIMIT 1',
         'Get_LoaderRunId' : 'SELECT loader_configs from run_def WHERE _id = %d',
         }
     def __create_db(self):
-        if os.path.isfile(CreateDBScript) and os.path.isfile(PrefillDBScript):
-            with open(CreateDBScript) as fdsc:
+        if os.path.isfile(self.CreateDBScript) and os.path.isfile(self.PrefillDBScript):
+            with open(self.CreateDBScript) as fdsc:
                 sqltext = fdsc.read()
             db_conn = sqlite3.connect(self.db_name)
             mycursor = db_conn.cursor()
             mycursor.executescript(sqltext)
-            with open(PrefillDBScript) as fdsc:
+            with open(self.PrefillDBScript) as fdsc:
                 sqltext = fdsc.read()
             mycursor.executescript(sqltext)
             db_conn.commit()

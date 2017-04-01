@@ -3,13 +3,14 @@
 import sys
 import os
 from pprint import pprint
-from collections import deque
+from collections import deque, OrderedDict
 from subprocess import Popen, PIPE, check_output, CalledProcessError
 import json
 import platform
 import sqlite3
 import time
 import os.path
+import stat
 from datetime import datetime
 
 #CURRENT_MPIRUN_PATH = "/opt/openmpi/bin/mpirun"   
@@ -22,9 +23,9 @@ DEVNULL = open(os.devnull, 'wb', 0)
 working_path = os.getcwd()
 g_hostname = platform.node().split('.')[0]
  
-queries = { "SELECT_RUN_CMD" : "SELECT _id, full_cmd, tiledb_ws FROM run_log WHERE host_id like \"%s\" AND run_def_id=%d;",
-    "SELECT_RUN_CMD2" : "SELECT _id, full_cmd, tiledb_ws FROM run_log WHERE host_id like \"%s\" AND _id=%d;",
-    "INSERT_TIME" : "INSERT INTO time_result (run_id, target_comand, time_result, genome_result, partition_1_size, db_size, pidstat_path) \
+queries = { "SELECT_RUN_CMD" : "SELECT _id, full_cmd, tiledb_ws FROM exec_def WHERE hostname like \"%s\" AND run_def_id=%d;",
+    "SELECT_RUN_CMD2" : "SELECT _id, full_cmd, tiledb_ws FROM exec_def WHERE hostname like \"%s\" AND _id=%d;",
+    "INSERT_TIME" : "INSERT INTO time_result (run_id, cmd_version, time_result, genome_result, partition_1_size, db_size, pidstat_path) \
  VALUES (%s, \"%s\", \"%s\", \"%s\", %s, \"%s\", \"%s\");" } 
 genome_profile_tags = {'fetch from vcf' : 'fv',
     'combining cells' :'cc',
@@ -140,9 +141,9 @@ def measure_more( cmd, logfile, gen_result_func ) :
   else:
     print("ERROR @{}: failed exec. cmd={}".format(g_hostname, theExecCmd) )
 
-def save_time_log(db_path, run_id, cmd, time_output, genome_output, pidstat_cvs, tiledb_ws) :
+def save_time_log(db_path, run_id, exec_info, time_output, genome_output, pidstat_cvs, tiledb_ws) :
     db_size = check_output(['du', '-sh', tiledb_ws]).decode('utf-8').split()[0]
-    stmt = queries['INSERT_TIME'] % (run_id, cmd, str(time_output), str(genome_output), 0, db_size, pidstat_cvs)
+    stmt = queries['INSERT_TIME'] % (run_id, exec_info, str(time_output), str(genome_output), 0, db_size, pidstat_cvs)
     print(stmt)
     db_conn = sqlite3.connect(db_path)
     crs = db_conn.cursor()
@@ -154,6 +155,8 @@ def save_time_log(db_path, run_id, cmd, time_output, genome_output, pidstat_cvs,
 def run_pre_test(working_dir, tiledb_root, isLoading) :
   script = 'precheck_tdb_ws.bash' if isLoading else 'prelaunch_check.bash'
   pre_test = os.path.join(working_dir, script)
+  st = os.stat(pre_test)
+  os.chmod(pre_test, st.st_mode | stat.S_IEXEC)
   assert(os.path.isfile(pre_test))
   cmd = "%s %s" % (pre_test, tiledb_root)
   proc = Popen([cmd], shell=True)
@@ -194,13 +197,40 @@ def pidstat2cvs(ifile, of_prefix) :
         cvs_pids.append(ofile)
     return cvs_pids
 
+def check_lib_path(expected_paths):
+    ''' list of full path of expected_paths '''
+    env_str = 'LD_LIBRARY_PATH'
+    epl = len(expected_paths)
+    if env_str in os.environ:
+        paths_dict = OrderedDict({p : i+epl for i, p in enumerate(os.environ[env_str].split(':')) if p } )
+        for ep in reversed(expected_path):
+          if ep not in path_dict:
+            if os.path.isdir(ep):
+                epl -= 1
+                paths_dict.add[ep] = epl
+            else:
+                raise RuntimeError('Needed library %s is not found' % ep)
+        paths_dict = OrderedDict(sorted(paths_dict.items(), key=lambda x : x[1]))
+        os.environ['LD_LIBRARY_PATH'] = ":".join([ p for p in paths_dict])
+    else:
+        os.environ['LD_LIBRARY_PATH'] = ":".join(expected_paths)
+    print("INFO %s: LD_LIBRARY_PATH=%s" % (g_hostname, os.environ['LD_LIBRARY_PATH']))
+
+def get_version_info(full_cmd):
+    ''' full_cmd may include mpirun'''
+    real_cmd = full_cmd[3] if os.path.basename(full_cmd[0]) == 'mpirun' else full_cmd[0]
+    return GenomicsExecInfo().get_version_info(real_cmd)
+  
+expected_lib_paths = [ '/home/mingrutar/opt/zlib/lib', '/usr/lib64/mpich/lib/', '/usr/lib64' ]
 if __name__ == '__main__' :
     assert(len(sys.argv)>1)
     rundef_id =int(sys.argv[1])
     runid = int(sys.argv[2]) if len(sys.argv) > 2 else None
     working_dir = os.path.dirname(sys.argv[0])
+    #TODO: $WS or os.getcwd()
     if not working_dir:
       working_dir = os.getcwd()
+
     db_path = os.path.join(working_dir, 'genomicsdb_loader.db')
     if not os.path.isfile(db_path) :
       print("INFO %s: not found %s, ...exit " % (g_hostname, db_path))
@@ -208,13 +238,22 @@ if __name__ == '__main__' :
 
     cmd_list = get_command(rundef_id, db_path, runid)        #
     if not cmd_list:
-          print("ERROR %s: no command found for runid=%d" % (g_hostname, rundef_id))
-          exit()
-
+      print("ERROR %s: no command found for runid=%d" % (g_hostname, rundef_id))
+      exit()
+    # check enrinment
+    try: 
+      check_lib_path(expected_lib_paths)
+    except RuntimeError as rterr:
+      print("ERROR %s: check_lib_path error: %s" % (g_hostname, rterr) )
+      exit()
+    # 
     isLoading = 'vcf2tiledb' in cmd_list[0][0]
     gen_result_func = __proc_gen_result if  isLoading else __proc_query_result
     rcount = 1 
     rtotal = len(cmd_list)
+    logspath = os.path.join(working_dir, "logs")
+    if not os.path.isdir(logspath):
+      os.makedirs(logspath)
 
     for cmd, tiledb_ws, run_id in cmd_list:
       rc = run_pre_test(working_dir, tiledb_ws, isLoading)
@@ -225,12 +264,11 @@ if __name__ == '__main__' :
 #        cmd = "%s -l %s" % (cmd, os.path.join(working_dir, 'loader_config.json'))   
       print("++++START %s: %d/%d, rid=%s, tdb_ws=%s, cmd=%s" % (g_hostname,rcount,rtotal,run_id, tiledb_ws, cmd))
       target_cmd = [ str(x.rstrip()) for x in cmd.split(' ') ]
-      if os.path.basename(target_cmd[0]) == 'mpirun':
-        target_cmd[0] = CURRENT_MPIRUN_PATH
+      version_str = get_version_info(target_cmd)
 
       # print('target_cmd=%s' % target_cmd)
       log_fn = "%d-%d-%s_pid.log" % (rundef_id, run_id, g_hostname)
-      log2path = os.path.join(working_dir, "logs", log_fn)
+      log2path = os.path.join(logspath, log_fn)
       print("INFO %s: pidstat.log=%s" % (g_hostname, log2path))
       time_nval, genome_time = measure_more(target_cmd, log2path, gen_result_func)
       if len(genome_time) > 0 :
@@ -242,7 +280,7 @@ if __name__ == '__main__' :
         cvsfiles = pidstat2cvs(log2path, cvs_prefix)
   #      print("INFO %s: cvsfiles= %s" % (g_hostname, str(cvsfiles) ))
         cvsfile = [ os.path.basename(x) for x in cvsfiles ]
-        save_time_log(db_path, run_id, os.path.basename(cmd), time_nval, genome_time, cvsfiles, tiledb_ws)
+        save_time_log(db_path, run_id, version_str, time_nval, genome_time, cvsfiles, tiledb_ws)
       else:
           print("WARN %s: No time measured for genomics executable, IGNORED. The exit status=%s" % (g_hostname, time_nval['9'] ))
       print("++++END %s: %d/%d, rid=%s" % (g_hostname, rcount, rtotal, run_id))

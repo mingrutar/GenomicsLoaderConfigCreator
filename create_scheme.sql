@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS host (
    hostname TEXT NOT NULL,
    ipaddress TEXT NULL,
    avalability INTEGER DEFAULT 1,
-   creation_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+   creation_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+   CONSTRAINT host_uniq UNIQUE (hostname ) ON CONFLICT REPLACE
 );
  --- loader config tags, with default_value 
  CREATE TABLE IF NOT EXISTS loader_config_tag (
@@ -38,14 +39,15 @@ CREATE TABLE IF NOT EXISTS query_config_tag (
     default_value TEXT NULL,
     tag_code TEXT NULL,
     user_definable INTEGER DEFAULT 0,
-    CONSTRAINT name_uniq UNIQUE (name ) ON CONFLICT REPLACE
+    CONSTRAINT name_uniq UNIQUE (name) ON CONFLICT REPLACE
 );
 CREATE TABLE IF NOT EXISTS template (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
    name Text NOT NULL,
    file_path Path NOT NULL,
    params TEXT NULL,
-   extra TEXT NULL
+   extra TEXT NULL,
+   CONSTRAINT name_uniq UNIQUE (name ) ON CONFLICT REPLACE
  );
 --
 -- define loader_config <=> a .json file under loaders/
@@ -76,24 +78,23 @@ CREATE TABLE IF NOT EXISTS run_def (
 -- 
 CREATE TABLE IF NOT EXISTS exec_def (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
-   run_def_id REFERENCES run_def(_id),
+   run_def_id REFERENCES run_def(_id) NOT NULL,
    num_parallel INTEGER DEFAULT 1,
    full_cmd TEXT NOT NULL,
-   host_id REFERENCES host(_id),
+   hostname TEXT,
    lcname TEXT DEFAULT '', 
-   extra_info TEXT DEFAULT '{}',
-   profiler_type TEXT DEFAULT '[time, pidstat]',
    tiledb_ws TEXT NOT NULL,
    tiledb_ws_status INTEGER DEFAULT 0,
    description TEXT,
+   profiler_type TEXT DEFAULT '[time, pidstat]',
    creation_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 --- for analysis, add partition 1 and total size for convenience
 CREATE TABLE IF NOT EXISTS time_result (
    _id INTEGER PRIMARY KEY AUTOINCREMENT,
-   run_id REFERENCES exec_def (_id),
-   exec_info REFERENCES exec_info (_id),
+   run_id REFERENCES exec_def (_id) NOT NULL,
+   cmd_version TEXT,
    time_result TEXT NOT NULL,
    genome_result TEXT,
    target_stdout_path TEXT,

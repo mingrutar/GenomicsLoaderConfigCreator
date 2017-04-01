@@ -20,8 +20,9 @@ check_tiledb_ws() {
 }
 
 echo 
-echo "===== precheck for loader $@"
-source prelaunch_check.bash 
+script=$(dirname $0)/prelaunch_check.bash
+echo "===== precheck for loader $script"
+source $script 
 check_tiledb_ws $@
 #[[ $? -eq 0 ]] && echo "$(hostname) : all good for loading"
 #echo 

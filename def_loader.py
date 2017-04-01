@@ -8,6 +8,7 @@ import json
 import uuid
 from datetime import datetime
 import time
+import stat
 import shutil
 from histogram import HistogramManager
 from core_data import RunVCFData
@@ -32,7 +33,7 @@ defined_runs = {}           # dbid,
 user_loader_conf_def = {}       # { uuid : { tag : val} }
 run_config = {}                 # { uuid : [ (host, lcdef) ] }
 
-data_handler = RunVCFData()
+data_handler = RunVCFData(RunVCFData.DefaultDBName)
 histogram_fn = None
 working_dir = os.environ.get('WS_HOME', os.getcwd())
 g_tile_workspace = None
@@ -112,6 +113,7 @@ def make_col_partition(bin_num):
         for parnum, begin in enumerate(begin_list):
             partitions.append({"array" :"TEST%d" % parnum,
                 "begin" : begin, "workspace" : g_tile_workspace })
+    print("make_col_partition: bin_num=%d, partitions[-1]=%s" % (bin_num, partitions[-1]))
     return partitions
 
 transformer = {'String' : lambda x : x if isinstance(x, str) else None,
@@ -212,6 +214,8 @@ def launch_run( run_def_id, dryrun, user_mpirun=None) :
             print('DRYRUN: os.system(%s)' % shell_cmd )
         else :
             print("launching test at %s" % (host))
+            st = os.stat(RUN_SCRIPT)
+            os.chmod(RUN_SCRIPT, st.st_mode | stat.S_IEXEC)
             os.system("ssh %s %s %d &" % (host, RUN_SCRIPT, run_def_id ))
     
     print("INFO run these %d commands @ host locally +++" % len(launch_manual) )
@@ -237,9 +241,9 @@ def getRunSettings(args):
         if opt == '-l':
             loader_config = os.path.join(working_dir, input)
         if opt == '-r':
-            parallel_config = os.path.join(working_dir, input)
-        if opt == '--dryrun' or opt == '-d':
-            dryrun = input.lower() in ['1', 'true'] 
+            parallel_config = os.path.join(working_dir, input.strip())
+        if opt == '-d':
+            dryrun = True 
 
     if not os.path.exists(loader_config):
         msg = "ERROR: cannot find load config file %s, exit..." % loader_config
