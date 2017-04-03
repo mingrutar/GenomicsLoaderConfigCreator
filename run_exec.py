@@ -12,6 +12,7 @@ import time
 import os.path
 import stat
 from datetime import datetime
+from get_exec_info import GenomicsExecInfo
 
 #CURRENT_MPIRUN_PATH = "/opt/openmpi/bin/mpirun"   
 CURRENT_MPIRUN_PATH = "/usr/lib64/mpich/bin/mpirun"
@@ -203,9 +204,9 @@ def check_lib_path(expected_paths):
     epl = len(expected_paths)
     if env_str in os.environ:
         paths_dict = OrderedDict({p : i+epl for i, p in enumerate(os.environ[env_str].split(':')) if p } )
-        for ep in reversed(expected_path):
-          if ep not in path_dict:
-            if os.path.isdir(ep):
+        for ep in reversed(expected_paths):
+          if ep not in paths_dict:
+            if os.paths.isdir(ep):
                 epl -= 1
                 paths_dict.add[ep] = epl
             else:

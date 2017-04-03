@@ -109,13 +109,14 @@ if __name__ == "__main__":
         exec_path = os.path.join("\\", "opt")
     tag = datetime.date.today().isoformat()
     exec_info_handler = GenomicsExecInfo()
+    print('==== updateBuild =====')
+    exec_info_handler.updateBuild(exec_path, tag)
+
     print('==== get_version_info =====')
     exec_info_handler3 = GenomicsExecInfo()
     version=exec_info_handler3.get_version_info('/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb')
     print("version=", version)
 
-    print('==== updateBuild =====')
-    exec_info_handler.updateBuild(exec_path, tag)
     # print('==== checkExecs =====')
     # exec_info_handler2 = GenomicsExecInfo()
     # exec_info_handler2.checkExecs()

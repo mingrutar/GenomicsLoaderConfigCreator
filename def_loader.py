@@ -15,7 +15,7 @@ from core_data import RunVCFData
 
 one_KB = 1024
 one_MB = 1048576
-TILE_WORKSPACE_PREFIX = "/mnt/app_hdd1/scratch/mingquery/tiledb-ws"
+TILE_WORKSPACE_PREFIX = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
 # befor 3/92017: TILE_WORKSPACE_PREFIX = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
 TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb"
 MPIRUN = "/opt/openmpi/bin/mpirun"
