@@ -14,8 +14,7 @@ import stat
 from datetime import datetime
 from get_exec_info import GenomicsExecInfo
 
-#CURRENT_MPIRUN_PATH = "/opt/openmpi/bin/mpirun"   
-CURRENT_MPIRUN_PATH = "/usr/lib64/mpich/bin/mpirun"
+CURRENT_MPIRUN_PATH = "/usr/lib64/mpich/bin/mpirun"   #"/opt/openmpi/bin/mpirun" 
 
 PIDSTAT_INTERVAL = 5        # in sec
 
