@@ -8,8 +8,8 @@ CLEAN_CACHES="/tools/utilities/bin/clear_caches.sh"
 EXEC_NAME="$HOME/cppProjects/GenomicsDB/bin/vcf2tiledb"
 EXEC_NAME_GT="$HOME/cppProjects/GenomicsDB/bin/gt_mpi_gather"
 
-#MPIRUN="/usr/lib64/mpich/bin/mpirun"
-MPIRUN="/opt/openmpi/bin/mpirun"
+MPIRUN="/usr/lib64/mpich/bin/mpirun"
+#MPIRUN="/opt/openmpi/bin/mpirun"
 
 check_app() {
   #check if vcf2tiledb exists
