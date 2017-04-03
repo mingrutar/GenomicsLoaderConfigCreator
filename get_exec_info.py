@@ -8,6 +8,7 @@ import hashlib
 import platform
 from subprocess import check_output 
 from time import sleep
+from core_data import RunVCFData
 
 class GenomicsExecInfo(object):
     # TODO: remove when version is available
@@ -29,6 +30,10 @@ class GenomicsExecInfo(object):
         }
     def __init__(self, db_name=None):
         self.db_name = db_name if db_name else self.DefaultDBName 
+        #TODO: for now create db only
+        data_handler = RunVCFData(self.db_name)
+        data_handler.close()
+
         self.db_conn = sqlite3.connect(self.db_name)
         # mycursor = self.db_conn.cursor()
         # mycursor.execute(self.queries["CREATE_VERSION_TABLE"])
