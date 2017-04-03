@@ -30,9 +30,9 @@ class GenomicsExecInfo(object):
     def __init__(self, db_name=None):
         self.db_name = db_name if db_name else self.DefaultDBName 
         self.db_conn = sqlite3.connect(self.db_name)
-        mycursor = self.db_conn.cursor()
-        mycursor.execute(self.queries["CREATE_VERSION_TABLE"])
-        mycursor.close()
+        # mycursor = self.db_conn.cursor()
+        # mycursor.execute(self.queries["CREATE_VERSION_TABLE"])
+        # mycursor.close()
 
     def __del__(self):
         self.db_conn.close()
