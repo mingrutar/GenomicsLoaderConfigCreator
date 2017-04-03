@@ -18,11 +18,11 @@ from get_exec_info import GenomicsExecInfo
 CURRENT_MPIRUN_PATH = "/usr/lib64/mpich/bin/mpirun"
 
 PIDSTAT_INTERVAL = 5        # in sec
-# no longer in use TILE_WORKSPACE = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws/"
 
 DEVNULL = open(os.devnull, 'wb', 0)
 working_path = os.getcwd()
 g_hostname = platform.node().split('.')[0]
+expected_lib_paths = [ '/home/mingrutar/opt/zlib/lib', '/usr/lib64/mpich/lib/', '/usr/lib64' ]
  
 queries = { "SELECT_RUN_CMD" : "SELECT _id, full_cmd, tiledb_ws FROM exec_def WHERE hostname like \"%s\" AND run_def_id=%d;",
     "SELECT_RUN_CMD2" : "SELECT _id, full_cmd, tiledb_ws FROM exec_def WHERE hostname like \"%s\" AND _id=%d;",
@@ -220,9 +220,11 @@ def check_lib_path(expected_paths):
 def get_version_info(full_cmd):
     ''' full_cmd may include mpirun'''
     real_cmd = full_cmd[3] if os.path.basename(full_cmd[0]) == 'mpirun' else full_cmd[0]
-    return GenomicsExecInfo().get_version_info(real_cmd)
+    handler = GenomicsExecInfo()
+    version = handler.get_version_info(real_cmd)
+    print("INFO++ get_version_info:  real_cmd=%s, version=%s" % (real_cmd, version))
+    return version
   
-expected_lib_paths = [ '/home/mingrutar/opt/zlib/lib', '/usr/lib64/mpich/lib/', '/usr/lib64' ]
 if __name__ == '__main__' :
     assert(len(sys.argv)>1)
     rundef_id =int(sys.argv[1])

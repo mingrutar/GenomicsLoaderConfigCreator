@@ -7,6 +7,7 @@ import datetime
 import hashlib
 import platform
 from subprocess import check_output 
+from time import sleep
 
 class GenomicsExecInfo(object):
     # TODO: remove when version is available
@@ -23,8 +24,8 @@ class GenomicsExecInfo(object):
         'SELECT_EXEC_INFO' : 'SELECT name, version, full_path, hash from exec_info where buid_tag=\"%s\";',
         "GET_CMD_VERSION" : "SELECT version, hash FROM exec_info WHERE full_path=\"%s\" ORDER BY _id desc limit 1;",
         "GET_COUNT_BY_HASH" : "SELECT count(*) FROM exec_info WHERE full_path=\"%s\" AND hash=\"%s\";",
-        'INSERT_EXEC_INFO' : 'INSERT INTO exec_info (buid_tag, name, version, full_path, build_time,hash,other) ' \
-            ' VALUES (\"%s\",\"%s\",\"%s\",\"%s\",%d,\"%s\",\"%s\");'        
+        'INSERT_EXEC_INFO' : 'INSERT INTO exec_info (buid_tag, name, version, full_path, build_time, hash) ' \
+            ' VALUES (\"%s\",\"%s\",\"%s\",\"%s\",%d,\"%s\");'        
         }
     def __init__(self, db_name=None):
         self.db_name = db_name if db_name else self.DefaultDBName 
@@ -46,7 +47,8 @@ class GenomicsExecInfo(object):
             # we do not have it
             version = check_output([full_fn, "--version"]).decode('utf-8').strip() if need_check_version else self.NO_VERSION
             stmt = self.queries["INSERT_EXEC_INFO"] % (self.tag, os.path.basename(full_fn), version, full_fn,
-                os.path.getctime(full_fn), hashcode, "")
+                os.path.getctime(full_fn), hashcode)
+            print("get_exec_info: stmt=", stmt)
             mycursor.execute(stmt)
             return True
         else:
@@ -85,22 +87,32 @@ class GenomicsExecInfo(object):
             except RuntimeError as rte:
                 print("FATAL: cannot find file %s: %s" % (row[2], rte))
         self.db_conn.close()
-        
+
+    def __get_version_info(self, stmt, full_path):
+        for row in self.mycursor.execute(stmt):
+            version_str = row[0]
+            hash_code = row[1]
+            if self.__check_exec_hash(full_path, hash_code):
+                return version_str
+        print("DEBUG: __get_version_info: need update for: ", full_path)
+        return None
+            
     def get_version_info(self, full_path):
-        try:
-            mycursor = self.db_conn.cursor()
-            stmt = self.queries['GET_CMD_VERSION'] % full_path
-            mycursor.execute(stmt)
-            if mycursor.rowcount > 0:
-                version_str, hash_code = mycursor.fetchone()
-                if self.__check_exec_hash(full_path, hash_code):
-                    return version_str
-            self.mycursor = mycursor
-            self.updateBuild(os.path.dirname(full_path))
-            version_str, hash_code = self.mycursor.execute(stmt).fetchone()
-            return version_str
-        finally:
-            self.db_conn.close()
+        self.mycursor = self.db_conn.cursor()
+        stmt = self.queries['GET_CMD_VERSION'] % full_path
+        version_str = self.__get_version_info(stmt, full_path)
+        if not version_str:
+            try:
+                exec_path = os.path.dirname(full_path)
+                self.updateBuild(exec_path)
+                print("DEBUG: get_version_info: updated for: ", exec_path)
+            except sqlite3.OperationalError as soe:
+                print("DEBUG: get_version_info: db is busy")
+                sleep(1)
+            finally:
+                version_str = self.__get_version_info(stmt, full_path)
+                self.db_conn.close()
+        return version_str
 
 if __name__ == "__main__":
     if platform.system() != 'Windows':          # real run
