@@ -13,7 +13,7 @@ import sys
 import collections
 import csv
 
-class TimeResultHandler(object):
+class TestResultHandler(object):
     def __init__(self, wkspace=None ):
         self.__wspace = wkspace if wkspace else os.getcwd()
         self.__runid = None
@@ -152,7 +152,6 @@ class TimeResultHandler(object):
         ex_labels = ["num_parallel", "qry_seg_size"] if self.is_query else ["num_parallel"]
         return ex_labels + lc_labels + rtime_labels 
 
-
     STATS_HEADS = ["%MEM", "kB_rd/s", "kB_wr/s"]
     STATS_ATTR = ["mean", "cv"]
     def write_csv_stat_labels(self, stat_writer, confgiList):
@@ -257,19 +256,19 @@ def testTimeResultHandler(resultData):
     for pids in pidfiles:                       # each machine
         print("pifiles=%s" % ",".join(pids))
 
-if __name__ == '__main__':
-    mypath = os.path.dirname(sys.argv[0])
-    print("mypath=%s" % mypath)
-    resultData = TimeResultHandler(mypath)
+# if __name__ == '__main__':
+#     mypath = os.path.dirname(sys.argv[0])
+#     print("mypath=%s" % mypath)
+#     resultData = TestResultHandler(mypath)
 
-    subdir="VDA349-2"
-    runid = 22
+#     subdir="VDA432-compression"
+#     runid = 1
 
-    run_dir = os.path.join("vcf2tiledb-data", subdir)
-    resultData.setResultPath(run_dir)
-    csv_file = resultData.export2csv(run_dir, runid)
-    print("csv file @ %s" % csv_file)
+#     run_dir = os.path.join("vcf2tiledb-data", subdir)
+#     resultData.setResultPath(run_dir)
+#     csv_file = resultData.export2csv(run_dir, runid)
+#     print("csv file @ %s" % csv_file)
 
-    resultData.close()
-    print("DONE")
+#     resultData.close()
+#     print("DONE")
     

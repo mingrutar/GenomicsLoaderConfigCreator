@@ -32,7 +32,7 @@ class RunVCFData(object):
         'Last_Run_Config' : 'SELECT loader_configs, _id FROM run_def ORDER BY _id desc LIMIT 1;',
         'User_Config' : 'SELECT config FROM loader_config_def WHERE name in (%s);',
         'User_Config_dict' : "SELECT name, config FROM loader_config_def WHERE name in (%s);",
-        'Time_Results' : 'SELECT tr.time_result, tr.genome_result, tr.pidstat_path, rl.lcname, rl.num_parallel,rl.profiler FROM time_result tr, exec_def rl where tr.run_id=rl._id and rl.run_def_id=%d order by rl._id desc;',
+        'Time_Results' : 'SELECT tr.time_result, tr.genome_result, tr.pidstat_path, rl.lcname, rl.num_parallel,rl.description FROM time_result tr, exec_def rl where tr.run_id=rl._id and rl.run_def_id=%d order by rl._id desc;',
         'Runs_of_RunDef' : 'SELECT lcname, num_parallel, tiledb_ws, hostname, full_cmd FROM exec_def WHERE run_def_id=%d;',
         'Get_Command' : 'SELECT target_command from run_def WHERE _id = %d', 
         'Run_ConfigNames' : 'SELECT lcname from exec_def WHERE run_def_id = %d',
