@@ -1,0 +1,9 @@
+{
+    "source_db_path": "genomicsdb_loader.db",
+    "segment_size": [10000,100000],
+    "_comment": "pick_mode: all, random, dense, sparse, only all for now",
+    "pick_mode" : "all",
+    "_comment2": "loader_exec_ids\" : [24, 36, 2 ]",
+    "lcname" : ["bn16","bn16nt100", "bn16nt10000"],
+    "loader_batch_id" : 6
+}

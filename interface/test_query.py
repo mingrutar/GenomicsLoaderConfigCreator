@@ -6,7 +6,7 @@ import os.path
 import json
 import time
 from histogram import HistogramManager
-from core_data import RunVCFData
+from core_data import DataHandler
 from copy import deepcopy
 import platform
 from shutil import rmtree
@@ -43,7 +43,7 @@ def __make_string_of_args(npq_params):
 # for our test
 def prepareTest(test_def, cmd_type):
     db_path = os.path.join(working_dir, test_def['source_db_path'])
-    data_handler = RunVCFData(db_path)
+    data_handler = DataHandler(db_path)
 
     query_def_list = [ load_run_id['run_id'] for load_run_id in test_def['test_batch'] ]
     q_def_run_id = data_handler.addRunConfig( str(query_def_list), cmd_type)

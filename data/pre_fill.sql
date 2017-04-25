@@ -5,12 +5,12 @@ DELETE FROM host;
 DELETE FROM template;
 DELETE FROM loader_config_tag;
 
---- fill host TABLE
+--- fill host TABLE, KD@compute-2-26; docker@compute-2-23 
 INSERT INTO host (hostname) VALUES ("compute-2-22");
-INSERT INTO host (hostname) VALUES ("compute-2-23");
+-- INSERT INTO host (hostname) VALUES ("compute-2-23");
 INSERT INTO host (hostname) VALUES ("compute-2-24");
 INSERT INTO host (hostname) VALUES ("compute-2-25");
-INSERT INTO host (hostname) VALUES ("compute-2-26");
+-- INSERT INTO host (hostname) VALUES ("compute-2-26");
 INSERT INTO host (hostname) VALUES ("compute-2-27");
 INSERT INTO host (hostname) VALUES ("compute-2-28");
 INSERT INTO host (hostname) VALUES ("compute-2-29");

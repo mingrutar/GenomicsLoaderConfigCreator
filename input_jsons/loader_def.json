@@ -1,0 +1,16 @@
+{
+    "name" : "test_zlib",
+    "additional_libs" : "/home/mingrutar/opt/zlib/lib/libz.so.1",
+    "tiledb_ws_root" : "/mnt/app_hdd1/scratch/mingzlib/",
+    "pararell_def" : {"0" : [1, 2, 4, 8, 16] },
+    "command_path" : "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb",
+
+    "loader_configs" : [
+        {"column_partitions" : 16 },
+        {"column_partitions" : 16, "num_parallel_vcf_files" : 2, "num_cells_per_tile" : 1000 },
+        {"column_partitions" : 16, "num_parallel_vcf_files" : 4, "num_cells_per_tile" : 1000 },
+        {"column_partitions" : 16, "num_parallel_vcf_files" : 1, "num_cells_per_tile" : 100 },
+        {"column_partitions" : 16, "num_parallel_vcf_files" : 1, "num_cells_per_tile" : 10000 },
+        {"column_partitions" : 16, "num_parallel_vcf_files" : 1, "num_cells_per_tile" : 100000 },
+        {"column_partitions" : 16, "num_parallel_vcf_files" : 1, "num_cells_per_tile" : 1000000 } ]
+}

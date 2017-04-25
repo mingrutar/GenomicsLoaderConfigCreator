@@ -1,0 +1,9 @@
+{
+    "name" : "test_1",
+    "tiledb_ws_root" : "/mnt/app_hdd1/scratch/mingzlib/",
+    "pararell_def" : {"0" : [1, 8, 25], "1" : [4, 16, 32]},
+    "command_path" : "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb",
+    "loader_configs" : [
+        {"column_partitions" : 32, "num_parallel_vcf_files" : 1, "num_cells_per_tile" : 100 },
+        {"column_partitions" : 32, "num_parallel_vcf_files" : 1, "num_cells_per_tile" : 1000000 } ]
+}
