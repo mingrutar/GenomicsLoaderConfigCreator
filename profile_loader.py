@@ -15,11 +15,11 @@ from core_data import RunVCFData
 
 one_KB = 1024
 one_MB = 1048576
-TILE_WORKSPACE_PREFIX = "/mnt/app_hdd1/scratch/mingzlib/tiledb-ws"
-# befor 3/92017: TILE_WORKSPACE_PREFIX = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
+g_tile_workspace_prefix = "/mnt/app_hdd1/scratch/mingperf/tiledb-ws"
 TARGET_TEST_COMMAND = "/home/mingrutar/cppProjects/GenomicsDB/bin/vcf2tiledb"
-MPIRUN = "/usr/lib64/mpich/bin/mpirun"
+// MPIRUN = "/opt/openmpi/bin/mpirun"
 RUN_SCRIPT = os.path.join(os.getcwd(),"run_exec.py")
+g_mpirun_path = "/usr/lib64/mpich/bin/mpirun"
 
 # look up 
 my_hostlist = []
@@ -156,7 +156,7 @@ def __genLoadConfig( lc_items ) :
 def __generateLoaderConfigFile(run_dir, fn_pre, lc_id):
     # tile db ws is tiledb-ws_ts
     global g_tile_workspace
-    g_tile_workspace = "%s_%s-%s/" % (TILE_WORKSPACE_PREFIX, lc_id, fn_pre)
+    g_tile_workspace = "%s_%s-%s/" % (g_tile_workspace_prefix, lc_id, fn_pre)
 
     load_config, partition_num = __genLoadConfig(user_loader_conf_def[lc_id]) 
     jsonfn = os.path.join(run_dir, "%s-%s.json" % (fn_pre, lc_id))
@@ -178,8 +178,7 @@ def __prepare_run (run_id, target_cmd, user_mpirun) :
                     if num_pr > 1:
                         jsonfn, tile_ws = __generateLoaderConfigFile(run_dir, "%s-%s" % (run_id, num_pr), lc_id )
                         theCommand = "%s -np %d %s %s" % (MPIRUN, num_pr, target_cmd, jsonfn) 
-                        # mpirunList.append((theCommand, tile_ws, num_pr, lc_id))
-                        commandList.append((theCommand, tile_ws, num_pr, lc_id))
+                        mpirunList.append((theCommand, tile_ws, num_pr, lc_id))
                     else:
                         jsonfn, tile_ws = __generateLoaderConfigFile(run_dir, "%s" % run_id, lc_id )
                         theCommand = "%s %s" % (target_cmd, jsonfn)
@@ -217,14 +216,13 @@ def launch_run( run_def_id, dryrun, user_mpirun=None) :
             print("launching test at %s" % (host))
             st = os.stat(RUN_SCRIPT)
             os.chmod(RUN_SCRIPT, st.st_mode | stat.S_IEXEC)
-            os.system("ssh -tt %s %s %d &" % (host, RUN_SCRIPT, run_def_id ))
+            os.system("ssh %s %s %d &" % (host, RUN_SCRIPT, run_def_id ))
     
-    if launch_manual:
-        print("INFO run these %d commands @ host locally +++" % len(launch_manual) )
-        for host, runCmdList in launch_manual.items():
-            for runCmd in runCmdList:
-                run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[3], runCmd[2])
-            print('command@%s : %s %s' % (host, RUN_SCRIPT, run_def_id))
+    print("INFO run these %d commands @ host locally +++" % len(launch_manual) )
+    for host, runCmdList in launch_manual.items():
+        for runCmd in runCmdList:
+            run_id = data_handler.addRunLog(run_def_id, host, runCmd[0], runCmd[1], runCmd[3], runCmd[2])
+        print('command@%s : %s %s' % (host, RUN_SCRIPT, run_def_id))
     print("DONE launch... ")
 
 def assign_run_id(lcdef_list):
@@ -241,7 +239,7 @@ def getRunSettings(args):
     # check args
     for opt, input in myopts:
         if opt == '-l':
-            loader_config = os.path.join(working_dir, input.strip())
+            loader_config = os.path.join(working_dir, input)
         if opt == '-r':
             parallel_config = os.path.join(working_dir, input.strip())
         if opt == '-d':

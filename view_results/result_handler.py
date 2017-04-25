@@ -64,11 +64,12 @@ class TimeResultHandler(object):
             results, cmd = self.data_handler.getAllResult(runid)
             if results:
                 self.__all_results = results
+                self.is_query = isinstance(results[0]['extra_info'], dict)
                 self.__runid = runid
                 self.genome_data = self.gexec_loader if 'vcf2tiledb' in cmd else self.gexec_query
     time_row_labels =['Command', 'Wall Clock (sec)', 'CPU %','Major Page Fault', 'Minor Page Fault', 
          'Involunteer Context Switch', 'File System Input', 'File System Output', 'Volunteer Context Switch',
-         'Exit Code','Avg total memory','Max resident set size','Avg resident set size']
+         'Exit Code','Max resident set size','Avg resident set size','Avg total memory']
     
     def shorten_command(self, line):
         llst = [  os.path.basename(cl) for cl in line.split() ]
@@ -140,33 +141,29 @@ class TimeResultHandler(object):
     def close(self):
         self.data_handler.close()
     
+    def __csv_labels(self, confgiList):
+        ldname =  next (iter (confgiList.values()))
+        lc_labels = [ k for k in ldname.keys() ]
+        rtime = self.__all_results[0]['rtime']      # name:val
+        rtime_labels = [''] * len(rtime)
+        for k,v in rtime.items():
+            idx = int(k)
+            rtime_labels[idx] = self.time_row_labels[idx]
+        ex_labels = ["num_parallel", "qry_seg_size"] if self.is_query else ["num_parallel"]
+        return ex_labels + lc_labels + rtime_labels 
+
+
     STATS_HEADS = ["%MEM", "kB_rd/s", "kB_wr/s"]
     STATS_ATTR = ["mean", "cv"]
     def write_csv_stat_labels(self, stat_writer, confgiList):
-        ldname =  next (iter (confgiList.values()))
-
-        lc_labels = [ k for k in ldname.keys() ]
-        rtime = self.__all_results[0]['rtime']      # name:val
-        rtime_labels = [''] * len(rtime)
-        for k,v in rtime.items():
-            idx = int(k)
-            rtime_labels[idx] = self.time_row_labels[idx]
-        
+        labels = self.__csv_labels(confgiList)
         stat_labels = []
         [ stat_labels.extend([ "%s_%s" % (st, att) for att in self.STATS_ATTR ] ) for st in self.STATS_HEADS ]
-        labels = lc_labels +  rtime_labels + stat_labels
-        stat_writer.writerow(labels)
+        all_labels = labels + stat_labels
+        stat_writer.writerow(all_labels)
 
     def write_csv_labels(self, csv_fd, confgiList):
-        ldname =  next (iter (confgiList.values()))
-
-        lc_labels = [ k for k in ldname.keys() ]
-        rtime = self.__all_results[0]['rtime']      # name:val
-        rtime_labels = [''] * len(rtime)
-        for k,v in rtime.items():
-            idx = int(k)
-            rtime_labels[idx] = self.time_row_labels[idx]
-
+        labels = self.__csv_labels(confgiList)
         gtime_labels = []
         gtimes = self.__all_results[0]['gtime']      #  30 labels num_ops x num(gtime_col_header)
         num_op = len(self.genome_data['tags'])
@@ -177,8 +174,8 @@ class TimeResultHandler(object):
             gtime_labels.extend(gt_op_labels)
             perproc_count += 1
             if perproc_count % num_op == 0:
-                labels = lc_labels +  rtime_labels + gtime_labels
-                csv_fd.write("%s\n" % ",".join(labels))
+                all_labels = labels + gtime_labels
+                csv_fd.write("%s\n" % ",".join(all_labels))
                 csv_fd.flush()
                 return
 
@@ -204,13 +201,17 @@ class TimeResultHandler(object):
         filename = os.path.join(self.__wspace, "csvfiles", "%s_%s-%s.csv" % (os.path.basename(run_dir), my_runid, os.path.basename(cmd)))
         csv_fd = open(filename, 'w')
         self.write_csv_labels(csv_fd, configDict)
+
         filename_stat = os.path.join(self.__wspace, "csvfiles", "%s_%s-%s-stat.csv" % (os.path.basename(run_dir), my_runid, os.path.basename(cmd)))
         csv_stat_fd = open(filename_stat, 'w')
         stat_writer = csv.writer(csv_stat_fd)
         self.write_csv_stat_labels(stat_writer, configDict)
-        stat_drop_front = int(30/2);            # drop 15 sec
-        stat_drop_end = -int(60/2);            # drop 15 sec
+
         for row in self.__all_results:
+            ex_data = [str(row["n_parallel"]) ]
+            if self.is_query:
+                ex_data.append(str(row['extra_info']['segment_size']))
+
             lc_data = [ v for v in configDict[row['lcname']].values() ]
             rtime = row['rtime']      # name:val
             rtime_data = [''] * len(rtime)
@@ -221,12 +222,10 @@ class TimeResultHandler(object):
                 stats_data = []
                 full_fn = os.path.join(self.__source, 'stats', os.path.basename(fn))
                 stat_df = pd.DataFrame.from_csv(full_fn)
-                stat_df = stat_df[stat_drop_front:]
-                stat_df = stat_df[:stat_drop_end]
                 for col in self.STATS_HEADS:
                     stats_data.append(stat_df[col].mean())
                     stats_data.append(stat_df[col].std() / stats_data[-1])
-                stat_row = lc_data + rtime_data + stats_data
+                stat_row = ex_data + lc_data + rtime_data + stats_data
                 stat_writer.writerow(stat_row)
 
             perproc_count = 0
@@ -237,7 +236,7 @@ class TimeResultHandler(object):
                 gtime_data.extend(gdata)
                 perproc_count += 1
                 if perproc_count % num_op == 0:
-                    aRow = lc_data + rtime_data + gtime_data
+                    aRow = ex_data + lc_data + rtime_data + gtime_data
                     csv_fd.write("%s\n" % ",".join(aRow) )
                     csv_fd.flush()
                     del gtime_data[:]
@@ -263,8 +262,8 @@ if __name__ == '__main__':
     print("mypath=%s" % mypath)
     resultData = TimeResultHandler(mypath)
 
-    subdir="VDA349"
-    runid = 17
+    subdir="VDA349-2"
+    runid = 22
 
     run_dir = os.path.join("vcf2tiledb-data", subdir)
     resultData.setResultPath(run_dir)

@@ -83,11 +83,12 @@ def prepareTest(test_def, cmd_type):
                 tq_params['array'] = 'TEST0'
             else:
                 tq_params['array'] = [ 'TEST%d' % i for i in range(run['num_proc'])]
-            for seg_size in test_def['segment_size']:
+            for seg_size in test_def['segment_size']:            
                 npq_params = deepcopy(tq_params)
                 npq_params['segment_size'] = seg_size
                 npq_params["scan_full"] = test_def["pick_mode"] == 'all' 
                 if test_def["pick_mode"] != 'all':
+                    # query 'random, dense, sparse' are not in use
                     for dist_name, num_pos in PosSelection.items():
                         selected_pos =[ hm.getPositions(dist_name, num_pos, bin_pos_list[ix]) for ix in range(run['num_proc']) ]
                         pos_list = list(chain.from_iterable(selected_pos))
@@ -104,7 +105,7 @@ def prepareTest(test_def, cmd_type):
                         query_arg = __make_string_of_args(npq_params)
                         data_handler.addRunLog(q_def_run_id, host, cmd, run['tdb_ws'], run['lc_name'], run['num_proc'], query_arg)
                         hosts[host].append(cmd)
-                else:
+                else:           # all position
                     query_fn = os.path.join(working_dir, QUERY_JSON_OUTPUT, 'query_%s-%s-%d-%s.json' % (run['lc_name'], run['num_proc'], seg_size, 'all'))
                     with open(query_fn, 'w') as wfd:
                         json.dump(npq_params, wfd)
